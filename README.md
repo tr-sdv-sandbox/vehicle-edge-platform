@@ -6,34 +6,39 @@ A modular edge computing platform for vehicle data acquisition, transformation, 
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                         Vehicle Edge Platform                            │
+│                         Vehicle Edge Platform                           │
 ├─────────────────────────────────────────────────────────────────────────┤
-│                                                                          │
-│  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐               │
-│  │  CAN Bus     │    │   KUKSA      │    │   OTEL       │    Probes     │
-│  │  (vssdag)    │    │  Databroker  │    │   Bridge     │               │
-│  └──────┬───────┘    └──────┬───────┘    └──────┬───────┘               │
-│         │                   │                   │                        │
-│         ▼                   ▼                   ▼                        │
-│  ┌─────────────────────────────────────────────────────┐                │
-│  │                    DDS Bus                          │                │
-│  │              (CycloneDDS + vdr_common)              │                │
-│  └─────────────────────────┬───────────────────────────┘                │
-│                            │                                             │
-│         ┌──────────────────┼──────────────────┐                         │
-│         ▼                  ▼                  ▼                         │
-│  ┌──────────────┐   ┌──────────────┐   ┌──────────────┐                │
-│  │ VDR Exporter │   │  RT Bridge   │   │ Kuksa Bridge │   Exporters    │
-│  │ (MQTT+zstd)  │   │  (loopback)  │   │  (gRPC)      │                │
-│  └──────┬───────┘   └──────────────┘   └──────────────┘                │
-│         │                                                                │
-│         ▼                                                                │
-│  ┌──────────────┐                                                       │
-│  │   Mosquitto  │──────────────────────────▶  Cloud                     │
-│  │   (MQTT)     │                                                       │
-│  └──────────────┘                                                       │
-│                                                                          │
+│                                                                         │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐                  │
+│  │  VSS CAN     │  │  OTEL Probe  │  │  AVTP Probe  │   Probes         │
+│  │   Probe      │  │  (gRPC in)   │  │  (Ethernet)  │                  │
+│  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘                  │
+│         │                 │                 │                           │
+│         ▼                 ▼                 ▼                           │
+│  ┌─────────────────────────────────────────────────────┐               │
+│  │                      DDS Bus                        │               │
+│  │                (CycloneDDS + vdr_common)            │               │
+│  └───────┬─────────────────┬─────────────────┬─────────┘               │
+│          │                 │                 │                          │
+│          ▼                 ▼                 ▼                          │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐                  │
+│  │ VDR Exporter │  │  RT Bridge   │  │ Kuksa Bridge │   Bridges        │
+│  │ (MQTT+zstd)  │  │  (loopback)  │  │    (gRPC)    │                  │
+│  └──────┬───────┘  └──────────────┘  └──────┬───────┘                  │
+│         │                                   │                           │
+│         ▼                                   ▼                           │
+│  ┌──────────────┐                   ┌──────────────┐                   │
+│  │   Mosquitto  │───▶ Cloud         │    KUKSA     │◀── 3rd Party Apps │
+│  │    (MQTT)    │                   │  Databroker  │    (VSS API)      │
+│  └──────────────┘                   └──────────────┘                   │
+│                                                                         │
 └─────────────────────────────────────────────────────────────────────────┘
+        ▲                    ▲                    ▲
+        │                    │                    │
+   ┌────┴────┐         ┌─────┴─────┐        ┌────┴────┐
+   │ CAN Bus │         │  OTel SDK │        │  AVTP   │
+   │ (vcan0) │         │  (Apps)   │        │ Network │
+   └─────────┘         └───────────┘        └─────────┘
 ```
 
 ## Components
@@ -125,15 +130,17 @@ After building:
 
 | Binary | Location | Description |
 |--------|----------|-------------|
+| `vdr_vss_can_probe` | `build/vep-core/probes/vss_can/` | CAN → VSS → DDS probe |
+| `vdr_otel_probe` | `build/vep-core/probes/otel/` | OTLP gRPC → DDS probe |
+| `vdr_avtp_probe` | `build/vep-core/probes/avtp/` | IEEE 1722 AVTP → DDS probe |
 | `vdr_exporter` | `build/vep-core/` | DDS → compressed MQTT exporter |
-| `cloud_backend_sim` | `build/vep-core/` | MQTT receiver/decoder |
 | `kuksa_dds_bridge` | `build/vep-core/` | KUKSA ↔ DDS bridge |
 | `rt_dds_bridge` | `build/vep-core/` | RT transport ↔ DDS bridge |
-| `vdr_vssdag_probe` | `build/vep-dds/examples/` | CAN → VSS → DDS probe |
+| `cloud_backend_sim` | `build/vep-core/` | MQTT receiver/decoder |
 
 ## Data Flow
 
-1. **CAN Ingestion**: `vdr_vssdag_probe` reads CAN frames from vcan0
+1. **CAN Ingestion**: `vdr_vss_can_probe` reads CAN frames from vcan0
 2. **VSS Transformation**: libvssdag transforms CAN signals to VSS paths using DBC + YAML mappings
 3. **DDS Publishing**: Signals published to DDS bus
 4. **Export**: `vdr_exporter` subscribes, batches, compresses (zstd), sends via MQTT
