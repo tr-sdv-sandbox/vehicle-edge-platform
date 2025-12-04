@@ -1,0 +1,515 @@
+# Model 3 CAN to VSS Signal Mappings with DAG dependencies
+#
+# Signal emission config:
+#   min_interval_ms:   Minimum time between emissions (rate limit/downsample), 0 = no limit
+#   max_interval_ms:   Maximum time between emissions (heartbeat for late-joiners), 0 = disabled, default 10s
+#   change_threshold:  Minimum change to trigger emission (deadband), 0 = any change
+#   eval_interval_ms:  Re-evaluate transform at this interval (for derived signals), 0 = only on dependency change
+
+mappings:
+  # ========== BASE CAN SIGNALS (SENSORS) ==========
+
+  - signal: Vehicle.Speed
+    source:
+      type: dbc
+      name: DI_vehicleSpeed
+    datatype: float
+    min_interval_ms: 100     # Max 10Hz output (from potentially faster CAN)
+    max_interval_ms: 1000    # Heartbeat every 1s
+    change_threshold: 0.5    # Suppress noise < 0.5 km/h
+    transform:
+      code: "lowpass(x, 0.3)"
+
+  - signal: Vehicle.Chassis.Brake.PedalPosition
+    source:
+      type: dbc
+      name: DI_brakePedalState
+    datatype: uint8
+    max_interval_ms: 5000    # Heartbeat every 5s (discrete state)
+    transform:
+      mapping:
+        - { from: "0", to: 0 }
+        - { from: "1", to: 100 }
+
+  - signal: Vehicle.Chassis.Accelerator.PedalPosition
+    source:
+      type: dbc
+      name: DI_accelPedalPos
+    datatype: uint8
+    min_interval_ms: 100     # Max 10Hz
+    max_interval_ms: 1000    # Heartbeat every 1s
+    change_threshold: 2      # Suppress noise < 2%
+    transform:
+      code: "clamp(math.floor(x), 0, 100)"
+
+  - signal: Vehicle.ADAS.ABS.IsEngaged
+    source:
+      type: dbc
+      name: ESP_absBrakeEvent2
+    datatype: boolean
+    max_interval_ms: 5000    # Heartbeat every 5s (event-like)
+    transform:
+      mapping:
+        - { from: "0", to: false }
+        - { from: "1", to: true }
+        - { from: "2", to: true }
+        - { from: "3", to: true }
+
+  - signal: Vehicle.Chassis.SteeringWheel.Angle
+    source:
+      type: dbc
+      name: SteeringAngle129
+    datatype: int16
+    min_interval_ms: 100     # Max 10Hz
+    max_interval_ms: 1000    # Heartbeat every 1s
+    change_threshold: 1      # Suppress noise < 1 degree
+    transform:
+      code: "math.floor(moving_avg(x, 5) + 0.5)"
+
+  - signal: Vehicle.Powertrain.Transmission.CurrentGear
+    source:
+      type: dbc
+      name: DI_gear
+    datatype: int8
+    max_interval_ms: 5000    # Heartbeat every 5s (discrete state)
+    transform:
+      mapping:
+        - { from: "DI_GEAR_INVALID", to: 0 }
+        - { from: "DI_GEAR_P", to: 0 }
+        - { from: "DI_GEAR_R", to: -1 }
+        - { from: "DI_GEAR_N", to: 0 }
+        - { from: "DI_GEAR_D", to: 1 }
+        - { from: "5", to: 0 }
+        - { from: "6", to: 0 }
+        - { from: "DI_GEAR_SNA", to: 0 }
+
+  # ========== FIRST-LEVEL DERIVED SIGNALS ==========
+  # Note: Using direct RCM_longitudinalAccel from IMU instead of deriving from speed
+
+  - signal: Vehicle.Acceleration.Longitudinal
+    source:
+      type: dbc
+      name: RCM_longitudinalAccel
+    datatype: float
+    min_interval_ms: 100     # Max 10Hz output
+    max_interval_ms: 1000    # Heartbeat every 1s
+    change_threshold: 0.1    # Suppress noise < 0.1 m/s²
+    transform:
+      code: "lowpass(x, 0.3)"  # Apply smoothing to raw IMU data
+
+  # ========== MULTI-DEPENDENCY ANALYTICS ==========
+
+  - signal: Telemetry.HarshBraking
+    datatype: boolean
+    depends_on: [Vehicle.Acceleration.Longitudinal, Vehicle.Chassis.Brake.PedalPosition, Vehicle.Speed]
+    max_interval_ms: 5000    # Heartbeat every 5s (event-like)
+    transform:
+      code: |
+        if not deps['Vehicle.Acceleration.Longitudinal'] then return nil end
+        local decel_mps2
+        if deps['Vehicle.Speed'] >= 0 then
+          decel_mps2 = math.max(0, -deps['Vehicle.Acceleration.Longitudinal'])
+        else
+          decel_mps2 = math.max(0, deps['Vehicle.Acceleration.Longitudinal'])
+        end
+        local brake_pressed = deps['Vehicle.Chassis.Brake.PedalPosition'] > 0
+        local harsh = decel_mps2 > 19.6 and brake_pressed
+        return sustained_condition(harsh, 200)
+
+  - signal: Telemetry.EmergencyStop
+    datatype: boolean
+    depends_on: [Telemetry.HarshBraking, Vehicle.ADAS.ABS.IsEngaged]
+    max_interval_ms: 5000    # Heartbeat every 5s (event-like)
+    transform:
+      code: |
+        if deps['Telemetry.HarshBraking'] == nil or deps['Vehicle.ADAS.ABS.IsEngaged'] == nil then
+          return nil
+        end
+        return deps['Telemetry.HarshBraking'] and deps['Vehicle.ADAS.ABS.IsEngaged']
+
+  - signal: Telemetry.PanicStop
+    datatype: boolean
+    depends_on: [Vehicle.Chassis.Accelerator.PedalPosition, Vehicle.Chassis.Brake.PedalPosition, Vehicle.Speed]
+    max_interval_ms: 5000    # Heartbeat every 5s (event-like)
+    transform:
+      code: |
+        local state = get_state()
+        local brake_pressed = deps['Vehicle.Chassis.Brake.PedalPosition'] > 0
+        if deps['Vehicle.Chassis.Accelerator.PedalPosition'] > 50 and not brake_pressed then
+          state.throttle_time = os.clock()
+        end
+        local panic = brake_pressed and
+                     state.throttle_time and
+                     (os.clock() - state.throttle_time) < 0.3 and
+                     deps['Vehicle.Speed'] > 50
+        return panic
+
+  # ========== STEERING ANALYSIS ==========
+
+  - signal: Vehicle.Chassis.SteeringWheel.AngularVelocity
+    datatype: float
+    depends_on: [Vehicle.Chassis.SteeringWheel.Angle]
+    eval_interval_ms: 100    # Re-evaluate every 100ms for derivative
+    min_interval_ms: 200     # Max 5Hz output
+    max_interval_ms: 1000    # Heartbeat every 1s
+    change_threshold: 5      # Suppress noise < 5 deg/s
+    transform:
+      code: "derivative(deps['Vehicle.Chassis.SteeringWheel.Angle'])"
+
+  - signal: Telemetry.AggressiveSteering
+    datatype: boolean
+    depends_on: [Vehicle.Chassis.SteeringWheel.AngularVelocity, Vehicle.Speed, Vehicle.Chassis.SteeringWheel.Angle]
+    max_interval_ms: 5000    # Heartbeat every 5s (event-like)
+    transform:
+      code: |
+        if not deps['Vehicle.Chassis.SteeringWheel.AngularVelocity'] or not deps['Vehicle.Chassis.SteeringWheel.Angle'] then
+          return nil
+        end
+        local aggressive = math.abs(deps['Vehicle.Chassis.SteeringWheel.AngularVelocity']) > 200 and
+                          deps['Vehicle.Speed'] > 60 and
+                          math.abs(deps['Vehicle.Chassis.SteeringWheel.Angle']) > 30
+        return sustained_condition(aggressive, 100)
+
+  # ========== DRIVER BEHAVIOR SCORES ==========
+
+  - signal: Telemetry.EcoScore
+    datatype: float
+    depends_on: [Vehicle.Speed, Vehicle.Chassis.Accelerator.PedalPosition, Vehicle.Acceleration.Longitudinal]
+    eval_interval_ms: 1000   # Re-evaluate every 1s
+    max_interval_ms: 5000    # Heartbeat every 5s
+    change_threshold: 1.0    # Suppress noise < 1 point
+    transform:
+      code: |
+        local speed = deps['Vehicle.Speed']
+        local accel = deps['Vehicle.Acceleration.Longitudinal']
+        local pedal = deps['Vehicle.Chassis.Accelerator.PedalPosition']
+        if speed == nil then return nil end
+        local score = 100
+        if accel and accel > 2 then
+          score = score - (accel - 2) * 10
+        end
+        if speed > 20 and speed < 90 then
+          score = score + 10
+        elseif speed > 120 then
+          score = score - 20
+        end
+        if pedal and pedal > 60 then
+          score = score - (pedal - 60) * 0.5
+        end
+        return clamp(lowpass(score, 0.1), 0, 100)
+
+  - signal: Telemetry.SafetyScore
+    datatype: float
+    depends_on: [Telemetry.HarshBraking, Telemetry.AggressiveSteering, Vehicle.Speed, Telemetry.EmergencyStop]
+    eval_interval_ms: 1000   # Re-evaluate every 1s
+    max_interval_ms: 5000    # Heartbeat every 5s
+    change_threshold: 1.0    # Suppress noise < 1 point
+    transform:
+      code: |
+        local state = get_state()
+        state.score = state.score or 100
+        state.score = math.min(100, state.score + 0.1)
+        if deps['Telemetry.HarshBraking'] then
+          state.score = state.score - 10
+        end
+        if deps['Telemetry.AggressiveSteering'] then
+          state.score = state.score - 5
+        end
+        if deps['Telemetry.EmergencyStop'] then
+          state.score = state.score - 20
+        end
+        if deps['Vehicle.Speed'] and deps['Vehicle.Speed'] > 130 then
+          state.score = state.score - 0.1 * (deps['Vehicle.Speed'] - 130)
+        end
+        return clamp(state.score, 0, 100)
+
+  # ========== ENERGY EFFICIENCY ==========
+
+  - signal: Vehicle.Powertrain.ElectricMotor.IsRegenerating
+    datatype: boolean
+    depends_on: [Vehicle.Acceleration.Longitudinal, Vehicle.Chassis.Brake.PedalPosition, Vehicle.Powertrain.Transmission.CurrentGear, Vehicle.Speed]
+    max_interval_ms: 5000    # Heartbeat every 5s
+    transform:
+      code: |
+        if not deps['Vehicle.Acceleration.Longitudinal'] or not deps['Vehicle.Powertrain.Transmission.CurrentGear'] or not deps['Vehicle.Speed'] then
+          return nil
+        end
+        local decel_mps2
+        if deps['Vehicle.Speed'] >= 0 then
+          decel_mps2 = math.max(0, -deps['Vehicle.Acceleration.Longitudinal'])
+        else
+          decel_mps2 = math.max(0, deps['Vehicle.Acceleration.Longitudinal'])
+        end
+        local brake_pressed = deps['Vehicle.Chassis.Brake.PedalPosition'] > 0
+        return decel_mps2 > 2 and
+               not brake_pressed and
+               deps['Vehicle.Powertrain.Transmission.CurrentGear'] == 1
+
+  # ========== TRAFFIC ANALYSIS ==========
+
+  - signal: Analytics.TrafficCongestion
+    datatype: string
+    depends_on: [Vehicle.Speed]
+    eval_interval_ms: 5000   # Re-evaluate every 5s
+    max_interval_ms: 30000   # Heartbeat every 30s
+    transform:
+      code: |
+        local avg_speed = moving_avg(deps['Vehicle.Speed'], 100)
+        local state = get_state()
+        state.speeds = state.speeds or {}
+        table.insert(state.speeds, deps['Vehicle.Speed'])
+        if #state.speeds > 100 then
+          table.remove(state.speeds, 1)
+        end
+        local sum = 0
+        for _, v in ipairs(state.speeds) do
+          sum = sum + (v - avg_speed)^2
+        end
+        local variance = sum / #state.speeds
+        if avg_speed < 10 and variance > 25 then
+          return "stop_and_go"
+        elseif avg_speed < 30 then
+          return "heavy"
+        elseif avg_speed < 50 and variance > 100 then
+          return "moderate"
+        elseif avg_speed < 80 then
+          return "light"
+        else
+          return "free_flow"
+        end
+
+  # ========== TURN SIGNALS ==========
+
+  - signal: Vehicle.Body.Lights.DirectionIndicator.Right.IsSignaling
+    source:
+      type: dbc
+      name: VCRIGHT_turnSignalStatus
+    datatype: boolean
+    max_interval_ms: 5000    # Heartbeat every 5s (discrete state)
+    transform:
+      mapping:
+        - { from: "0", to: false }
+        - { from: "1", to: true }
+        - { from: "2", to: true }
+        - { from: "3", to: false }
+
+  - signal: Vehicle.Body.Lights.DirectionIndicator.Left.IsSignaling
+    source:
+      type: dbc
+      name: VCLEFT_turnSignalStatus
+    datatype: boolean
+    max_interval_ms: 5000    # Heartbeat every 5s (discrete state)
+    transform:
+      mapping:
+        - { from: "0", to: false }
+        - { from: "1", to: true }
+        - { from: "2", to: true }
+        - { from: "3", to: false }
+
+  - signal: Vehicle.Body.Lights.Backup.IsOn
+    source:
+      type: dbc
+      name: VCRIGHT_reverseLightStatus
+    datatype: boolean
+    max_interval_ms: 5000    # Heartbeat every 5s (discrete state)
+    transform:
+      mapping:
+        - { from: "LIGHT_OFF", to: false }
+        - { from: "LIGHT_ON", to: true }
+        - { from: "LIGHT_FAULT", to: false }
+        - { from: "LIGHT_SNA", to: false }
+
+  # ========== BATTERY ==========
+
+  - signal: Vehicle.Powertrain.TractionBattery.StateOfCharge.Current
+    source:
+      type: dbc
+      name: SOCUI292
+    datatype: float
+    min_interval_ms: 1000    # Max 1Hz (slow-changing)
+    max_interval_ms: 10000   # Heartbeat every 10s
+    change_threshold: 0.5    # Suppress noise < 0.5%
+    transform:
+      code: "x"
+
+  - signal: Vehicle.Powertrain.TractionBattery.CurrentVoltage
+    source:
+      type: dbc
+      name: BattVoltage132
+    datatype: float
+    min_interval_ms: 1000    # Max 1Hz
+    max_interval_ms: 10000   # Heartbeat every 10s
+    change_threshold: 0.5    # Suppress noise < 0.5V
+    transform:
+      code: "x"
+
+  - signal: Vehicle.Powertrain.TractionBattery.CurrentCurrent
+    source:
+      type: dbc
+      name: SmoothBattCurrent132
+    datatype: float
+    min_interval_ms: 500     # Max 2Hz (more dynamic)
+    max_interval_ms: 5000    # Heartbeat every 5s
+    change_threshold: 1.0    # Suppress noise < 1A
+    transform:
+      code: "x"
+
+  # ========== MOTOR ==========
+  # Note: Using RearTorque1D8 as the main motor torque (rear-wheel drive primary)
+  # Model 3 doesn't expose direct motor RPM via DBC - would need to derive from vehicle speed
+
+  - signal: Vehicle.Powertrain.ElectricMotor.Torque
+    source:
+      type: dbc
+      name: RearTorque1D8
+    datatype: int16
+    min_interval_ms: 100     # Max 10Hz (dynamic)
+    max_interval_ms: 1000    # Heartbeat every 1s
+    change_threshold: 5      # Suppress noise < 5 Nm
+    transform:
+      code: "math.floor(x + 0.5)"
+
+  # ========== DOORS ==========
+
+  - signal: Vehicle.Cabin.Door.Row1.DriverSide.IsOpen
+    source:
+      type: dbc
+      name: VCLEFT_frontDoorState
+    datatype: boolean
+    max_interval_ms: 5000    # Heartbeat every 5s (discrete state)
+    transform:
+      mapping:
+        - { from: "DOOR_STATE_CLOSED", to: false }
+        - { from: "DOOR_STATE_OPEN", to: true }
+        - { from: "DOOR_STATE_AJAR", to: true }
+        - { from: "DOOR_STATE_DEFAULT", to: false }
+
+  - signal: Vehicle.Cabin.Door.Row2.DriverSide.IsOpen
+    source:
+      type: dbc
+      name: VCLEFT_rearDoorState
+    datatype: boolean
+    max_interval_ms: 5000    # Heartbeat every 5s (discrete state)
+    transform:
+      mapping:
+        - { from: "DOOR_STATE_CLOSED", to: false }
+        - { from: "DOOR_STATE_OPEN", to: true }
+        - { from: "DOOR_STATE_AJAR", to: true }
+        - { from: "DOOR_STATE_DEFAULT", to: false }
+
+  - signal: Vehicle.Body.Trunk.Rear.IsOpen
+    source:
+      type: dbc
+      name: VCRIGHT_trunkLatchStatus
+    datatype: boolean
+    max_interval_ms: 5000    # Heartbeat every 5s (discrete state)
+    transform:
+      mapping:
+        - { from: "LATCH_LOCKED", to: false }
+        - { from: "LATCH_UNLOCKED", to: false }
+        - { from: "LATCH_AJAR", to: true }
+        - { from: "LATCH_OPEN", to: true }
+        - { from: "LATCH_CLOSING", to: true }
+        - { from: "LATCH_DEFAULT", to: false }
+
+  # ========== HVAC ==========
+  # Note: HVAC target temperature signals not available in this DBC file
+
+  # ========== DERIVED POWER/ENERGY ==========
+
+  - signal: Vehicle.Powertrain.TractionBattery.CurrentPower
+    datatype: float
+    depends_on: [Vehicle.Powertrain.TractionBattery.CurrentVoltage, Vehicle.Powertrain.TractionBattery.CurrentCurrent]
+    min_interval_ms: 1000    # Max 1Hz
+    max_interval_ms: 10000   # Heartbeat every 10s
+    change_threshold: 0.5    # Suppress noise < 0.5 kW
+    transform:
+      code: |
+        if not deps['Vehicle.Powertrain.TractionBattery.CurrentVoltage'] or not deps['Vehicle.Powertrain.TractionBattery.CurrentCurrent'] then
+          return nil
+        end
+        return deps['Vehicle.Powertrain.TractionBattery.CurrentVoltage'] * deps['Vehicle.Powertrain.TractionBattery.CurrentCurrent'] / 1000
+
+  - signal: Vehicle.Powertrain.ElectricMotor.Power
+    datatype: int16
+    depends_on: [Vehicle.Powertrain.ElectricMotor.Torque, Vehicle.Speed]
+    min_interval_ms: 200     # Max 5Hz
+    max_interval_ms: 2000    # Heartbeat every 2s
+    change_threshold: 1      # Suppress noise < 1 kW
+    transform:
+      code: |
+        -- Derive motor power from torque and vehicle speed
+        -- P = T * omega, estimate omega from vehicle speed (assuming ~9.73:1 final drive ratio)
+        if not deps['Vehicle.Powertrain.ElectricMotor.Torque'] or not deps['Vehicle.Speed'] then
+          return nil
+        end
+        local speed_ms = deps['Vehicle.Speed'] / 3.6  -- km/h to m/s
+        local wheel_radius = 0.35  -- ~35cm wheel radius
+        local final_drive = 9.73   -- Model 3 final drive ratio
+        local motor_rpm = (speed_ms / wheel_radius) * final_drive * 60 / (2 * 3.14159)
+        local power_kw = deps['Vehicle.Powertrain.ElectricMotor.Torque'] * motor_rpm * 0.10472 / 1000
+        return math.floor(power_kw + 0.5)
+
+  - signal: Telemetry.Efficiency
+    datatype: float
+    depends_on: [Vehicle.Powertrain.ElectricMotor.Power, Vehicle.Powertrain.TractionBattery.CurrentPower]
+    eval_interval_ms: 1000   # Re-evaluate every 1s
+    max_interval_ms: 10000   # Heartbeat every 10s
+    change_threshold: 1.0    # Suppress noise < 1%
+    transform:
+      code: |
+        if not deps['Vehicle.Powertrain.ElectricMotor.Power'] or not deps['Vehicle.Powertrain.TractionBattery.CurrentPower'] then
+          return nil
+        end
+        local efficiency = 0
+        if deps['Vehicle.Powertrain.TractionBattery.CurrentPower'] > 0.1 then
+          efficiency = (deps['Vehicle.Powertrain.ElectricMotor.Power'] / deps['Vehicle.Powertrain.TractionBattery.CurrentPower']) * 100
+          efficiency = clamp(efficiency, 0, 100)
+        end
+        return efficiency
+
+  - signal: Telemetry.EnergyConsumption
+    datatype: float
+    depends_on: [Vehicle.Powertrain.TractionBattery.CurrentPower, Vehicle.Speed]
+    eval_interval_ms: 1000   # Re-evaluate every 1s
+    max_interval_ms: 10000   # Heartbeat every 10s
+    change_threshold: 5      # Suppress noise < 5 Wh/km
+    transform:
+      code: |
+        if not deps['Vehicle.Powertrain.TractionBattery.CurrentPower'] then
+          return nil
+        end
+        local consumption = 0
+        if deps['Vehicle.Speed'] and deps['Vehicle.Speed'] > 1 then
+          consumption = (deps['Vehicle.Powertrain.TractionBattery.CurrentPower'] * 1000) / deps['Vehicle.Speed']
+          consumption = moving_avg(consumption, 10)
+        end
+        return consumption
+
+  # ========== VSS 4.0 STRUCT SUPPORT ==========
+
+  - signal: Vehicle.DynamicsStruct
+    datatype: struct
+    struct_type: Types.VehicleDynamics
+    depends_on: [Vehicle.Speed, Vehicle.Acceleration.Longitudinal]
+    min_interval_ms: 200     # Max 5Hz
+    max_interval_ms: 2000    # Heartbeat every 2s
+    transform:
+      code: |
+        return {
+          Speed = deps['Vehicle.Speed'] or 0,
+          LongitudinalAcceleration = deps['Vehicle.Acceleration.Longitudinal'] or 0
+        }
+
+  - signal: Vehicle.Chassis.PedalsStruct
+    datatype: struct
+    struct_type: Types.PedalPositions
+    depends_on: [Vehicle.Chassis.Brake.PedalPosition, Vehicle.Chassis.Accelerator.PedalPosition]
+    min_interval_ms: 100     # Max 10Hz
+    max_interval_ms: 1000    # Heartbeat every 1s
+    transform:
+      code: |
+        return {
+          BrakePedalPosition = deps['Vehicle.Chassis.Brake.PedalPosition'] or 0,
+          AcceleratorPedalPosition = deps['Vehicle.Chassis.Accelerator.PedalPosition'] or 0
+        }
