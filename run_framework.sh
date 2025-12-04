@@ -82,17 +82,19 @@ KUKSA_DDS_BRIDGE="$BUILD_DIR/vep-core/kuksa_dds_bridge"
 RT_DDS_BRIDGE="$BUILD_DIR/vep-core/rt_dds_bridge"
 CLOUD_BACKEND="$BUILD_DIR/vep-core/cloud_backend_sim"
 
-# VSS DAG probe from vep-dds examples
-VSSDAG_PROBE="$BUILD_DIR/vep-dds/examples/vdr_vssdag_probe"
+# Probes from vep-core/probes
+VSS_CAN_PROBE="$BUILD_DIR/vep-core/probes/vss_can/vdr_vss_can_probe"
+OTEL_PROBE="$BUILD_DIR/vep-core/probes/otel/vdr_otel_probe"
+AVTP_PROBE="$BUILD_DIR/vep-core/probes/avtp/vdr_avtp_probe"
 
 if [ ! -f "$VDR_EXPORTER" ]; then
     echo "Error: vdr_exporter not found. Run './build-all.sh' first."
     exit 1
 fi
 
-if [ ! -f "$VSSDAG_PROBE" ]; then
-    echo "Warning: vdr_vssdag_probe not found at $VSSDAG_PROBE"
-    VSSDAG_PROBE=""
+if [ ! -f "$VSS_CAN_PROBE" ]; then
+    echo "Warning: vdr_vss_can_probe not found at $VSS_CAN_PROBE"
+    VSS_CAN_PROBE=""
 fi
 
 # Setup vcan0 (always needed for CAN replay)
@@ -186,15 +188,15 @@ echo "  vdr_exporter running (PID ${PIDS[-1]})"
 
 sleep 1
 
-# Start vssdag probe (CAN-to-VSS)
-if [ -n "$VSSDAG_PROBE" ]; then
-    echo "Starting vdr_vssdag_probe (CAN -> VSS -> DDS)..."
-    "$VSSDAG_PROBE" \
+# Start VSS CAN probe (CAN-to-VSS)
+if [ -n "$VSS_CAN_PROBE" ]; then
+    echo "Starting vdr_vss_can_probe (CAN -> VSS -> DDS)..."
+    "$VSS_CAN_PROBE" \
         --config "$CONFIG_DIR/model3_mappings_dag.yaml" \
         --interface vcan0 \
         --dbc "$CONFIG_DIR/Model3CAN.dbc" &
     PIDS+=($!)
-    echo "  vdr_vssdag_probe running (PID ${PIDS[-1]})"
+    echo "  vdr_vss_can_probe running (PID ${PIDS[-1]})"
 fi
 
 # Start RT-DDS bridge (DDS <-> RT transport, loopback mode for simulation)
@@ -226,8 +228,8 @@ echo ""
 echo "Services:"
 echo "  - Mosquitto MQTT broker: localhost:1883"
 echo "  - VDR Exporter: subscribing to DDS, publishing to MQTT"
-if [ -n "$VSSDAG_PROBE" ]; then
-    echo "  - VSS DAG Probe: listening on vcan0 for CAN traffic"
+if [ -n "$VSS_CAN_PROBE" ]; then
+    echo "  - VSS CAN Probe: listening on vcan0 for CAN traffic"
 fi
 if [ -n "$KUKSA_CONTAINER" ]; then
     echo "  - KUKSA Databroker: localhost:$KUKSA_PORT (container: $KUKSA_CONTAINER)"
