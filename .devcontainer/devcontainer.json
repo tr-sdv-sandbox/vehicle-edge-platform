@@ -1,0 +1,28 @@
+{
+    "name": "Vehicle Edge Platform",
+    "build": {
+        "dockerfile": "Dockerfile"
+    },
+    "features": {
+        "ghcr.io/devcontainers/features/git:1": {}
+    },
+    "customizations": {
+        "vscode": {
+            "extensions": [
+                "ms-vscode.cpptools",
+                "ms-vscode.cmake-tools",
+                "twxs.cmake",
+                "vadimcn.vscode-lldb"
+            ],
+            "settings": {
+                "cmake.configureOnOpen": true,
+                "cmake.buildDirectory": "${workspaceFolder}/build"
+            }
+        }
+    },
+    "mounts": [
+        "source=${localEnv:HOME}/.ssh,target=/home/vscode/.ssh,type=bind,readonly"
+    ],
+    "postCreateCommand": "./setup.sh",
+    "remoteUser": "vscode"
+}
