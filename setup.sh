@@ -22,6 +22,7 @@ fi
 
 # Component repositories
 REPOS=(
+    "covesa-ifex-core"
     "libvss-types"
     "libvssdag"
     "libkuksa-cpp"

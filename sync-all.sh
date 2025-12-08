@@ -8,6 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 COMPONENTS_DIR="$SCRIPT_DIR/components"
 
 REPOS=(
+    "covesa-ifex-core"
     "libvss-types"
     "libvssdag"
     "libkuksa-cpp"

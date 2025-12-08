@@ -48,6 +48,15 @@ RUN apt-get update && apt-get install -y \
     # CAN utilities
     can-utils \
     \
+    # Python (for IFEX proto generation)
+    python3 \
+    python3-pip \
+    python3-grpcio \
+    python3-protobuf \
+    python3-flask \
+    python3-flask-cors \
+    python3-yaml \
+    \
     # Development tools
     gdb \
     valgrind \

@@ -47,7 +47,15 @@ $SUDO apt-get install -y \
     cyclonedds-dev \
     cyclonedds-tools \
     \
-    can-utils
+    can-utils \
+    \
+    python3 \
+    python3-pip \
+    python3-grpcio \
+    python3-protobuf \
+    python3-flask \
+    python3-flask-cors \
+    python3-yaml
 
 echo ""
 
@@ -56,7 +64,7 @@ echo ""
 # ==============================================================================
 echo "=== Installing concurrentqueue ==="
 
-if [ -f /usr/local/include/concurrentqueue/concurrentqueue.h ]; then
+if [ -f /usr/local/include/concurrentqueue/moodycamel/concurrentqueue.h ] || [ -f /usr/local/include/moodycamel/concurrentqueue.h ]; then
     echo "concurrentqueue already installed, skipping"
 else
     cd /tmp
@@ -116,6 +124,7 @@ echo "  - Mosquitto (MQTT)"
 echo "  - Zstd (compression)"
 echo "  - CycloneDDS"
 echo "  - CAN utilities"
+echo "  - Python3 + gRPC/Flask (for IFEX)"
 echo "  - concurrentqueue"
 echo "  - dbcppp"
 echo ""
