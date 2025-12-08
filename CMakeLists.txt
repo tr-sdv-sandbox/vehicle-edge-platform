@@ -246,6 +246,20 @@ else()
 endif()
 
 # ==============================================================================
+# Component 6: covesa-ifex-core (optional, standalone IFEX services)
+# ==============================================================================
+if(EXISTS ${COMPONENTS_DIR}/covesa-ifex-core/CMakeLists.txt)
+    message(STATUS "Adding covesa-ifex-core")
+    set(BUILD_CORE ON CACHE BOOL "" FORCE)
+    set(BUILD_REFERENCE_SERVICES ON CACHE BOOL "" FORCE)
+    set(BUILD_TEST_SERVICES ON CACHE BOOL "" FORCE)
+    set(BUILD_INTEGRATION_TESTS ${VEP_BUILD_TESTS} CACHE BOOL "" FORCE)
+    add_subdirectory(${COMPONENTS_DIR}/covesa-ifex-core ${CMAKE_BINARY_DIR}/covesa-ifex-core)
+else()
+    message(STATUS "covesa-ifex-core not found, skipping (optional)")
+endif()
+
+# ==============================================================================
 # Summary
 # ==============================================================================
 message(STATUS "")
@@ -258,6 +272,9 @@ message(STATUS "  - libkuksa-cpp")
 endif()
 message(STATUS "  - vep-dds")
 message(STATUS "  - vep-core")
+if(EXISTS ${COMPONENTS_DIR}/covesa-ifex-core/CMakeLists.txt)
+message(STATUS "  - covesa-ifex-core")
+endif()
 message(STATUS "")
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "Tests: ${VEP_BUILD_TESTS}")
