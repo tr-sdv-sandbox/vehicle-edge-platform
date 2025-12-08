@@ -39,11 +39,12 @@ if [ ! -f "$BUILD_DIR/vep-core/vep_mqtt_receiver" ]; then
     exit 1
 fi
 
-# Check Mosquitto broker is running
-if systemctl is-active --quiet mosquitto; then
+# Check Mosquitto broker is running (port 1883)
+if nc -z localhost 1883 2>/dev/null; then
     echo "Mosquitto broker running on localhost:1883"
 else
-    echo "Warning: Mosquitto broker not running. Start with: sudo systemctl start mosquitto"
+    echo "Warning: Mosquitto broker not running."
+    echo "  Start the framework first: ./run_framework.sh"
 fi
 
 echo ""

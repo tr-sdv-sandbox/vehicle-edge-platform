@@ -59,6 +59,13 @@ cleanup() {
         docker rm -f "$KUKSA_CONTAINER" 2>/dev/null
     fi
 
+    # Stop Mosquitto container
+    if [ -n "$MOSQUITTO_CONTAINER" ]; then
+        echo "  Stopping Mosquitto container..."
+        docker stop --time 1 "$MOSQUITTO_CONTAINER" 2>/dev/null
+        docker rm -f "$MOSQUITTO_CONTAINER" 2>/dev/null
+    fi
+
     echo "Framework stopped."
 }
 
@@ -87,6 +94,9 @@ VEP_CAN_PROBE="$BUILD_DIR/vep-core/probes/vep_can_probe/vep_can_probe"
 VEP_OTEL_PROBE="$BUILD_DIR/vep-core/probes/vep_otel_probe/vep_otel_probe"
 VEP_AVTP_PROBE="$BUILD_DIR/vep-core/probes/vep_avtp_probe/vep_avtp_probe"
 
+# Tools
+VEP_HOST_METRICS="$BUILD_DIR/vep-core/tools/vep_host_metrics/vep_host_metrics"
+
 if [ ! -f "$VEP_EXPORTER" ]; then
     echo "Error: vep_exporter not found. Run './build-all.sh' first."
     exit 1
@@ -108,12 +118,45 @@ else
     echo "  vcan0 already exists"
 fi
 
-# Check Mosquitto broker is running
+# Start Mosquitto MQTT broker
+MOSQUITTO_CONTAINER=""
+MOSQUITTO_PORT=1883
 echo ""
-if systemctl is-active --quiet mosquitto; then
-    echo "Mosquitto broker running on localhost:1883"
-else
-    echo "Warning: Mosquitto broker not running. Start with: sudo systemctl start mosquitto"
+echo "Starting Mosquitto MQTT broker on port $MOSQUITTO_PORT..."
+
+# Generate unique container name
+MOSQUITTO_CONTAINER="mosquitto-vep-framework-$$"
+
+# Start Mosquitto with anonymous access enabled (listener + allow_anonymous)
+docker run -d \
+    --name "$MOSQUITTO_CONTAINER" \
+    -p $MOSQUITTO_PORT:1883 \
+    eclipse-mosquitto:2 \
+    sh -c 'echo -e "listener 1883\nallow_anonymous true" > /tmp/mosquitto.conf && mosquitto -c /tmp/mosquitto.conf' >/dev/null 2>&1
+
+if [ $? -ne 0 ]; then
+    echo "Error: Failed to start Mosquitto broker"
+    echo "Try: docker pull eclipse-mosquitto:2"
+    exit 1
+fi
+
+echo "  Mosquitto broker running (container: $MOSQUITTO_CONTAINER)"
+
+# Wait for Mosquitto to be ready
+echo "  Waiting for Mosquitto to be ready..."
+for i in $(seq 1 10); do
+    if nc -z localhost $MOSQUITTO_PORT 2>/dev/null; then
+        echo "  Mosquitto broker ready on localhost:$MOSQUITTO_PORT"
+        break
+    fi
+    sleep 0.5
+done
+
+if ! nc -z localhost $MOSQUITTO_PORT 2>/dev/null; then
+    echo "Error: Mosquitto broker failed to start"
+    docker logs "$MOSQUITTO_CONTAINER"
+    docker rm -f "$MOSQUITTO_CONTAINER" 2>/dev/null
+    exit 1
 fi
 
 # Start KUKSA databroker (if kuksa_dds_bridge is present)
@@ -220,13 +263,32 @@ if [ -f "$KUKSA_DDS_BRIDGE" ] && [ -n "$KUKSA_CONTAINER" ]; then
     echo "  kuksa_dds_bridge running (PID ${PIDS[-1]})"
 fi
 
+# Start OTEL probe (OTLP gRPC -> DDS)
+if [ -f "$VEP_OTEL_PROBE" ]; then
+    echo "Starting vep_otel_probe (OTLP gRPC -> DDS)..."
+    "$VEP_OTEL_PROBE" &
+    PIDS+=($!)
+    echo "  vep_otel_probe running (PID ${PIDS[-1]})"
+    sleep 1  # Give it time to start listening
+fi
+
+# Start host metrics collector (Linux metrics -> OTLP gRPC)
+if [ -f "$VEP_HOST_METRICS" ] && [ -f "$VEP_OTEL_PROBE" ]; then
+    echo "Starting vep_host_metrics (Linux metrics -> OTLP)..."
+    "$VEP_HOST_METRICS" \
+        --endpoint=localhost:4317 \
+        --interval=10 &
+    PIDS+=($!)
+    echo "  vep_host_metrics running (PID ${PIDS[-1]})"
+fi
+
 echo ""
 echo "=================================================="
 echo "Framework running!"
 echo "=================================================="
 echo ""
 echo "Services:"
-echo "  - Mosquitto MQTT broker: localhost:1883"
+echo "  - Mosquitto MQTT broker: localhost:$MOSQUITTO_PORT (container: $MOSQUITTO_CONTAINER)"
 echo "  - VEP Exporter: subscribing to DDS, publishing to MQTT"
 if [ -n "$VEP_CAN_PROBE" ]; then
     echo "  - VEP CAN Probe: listening on vcan0 for CAN traffic"
@@ -239,6 +301,12 @@ if [ -f "$RT_DDS_BRIDGE" ]; then
 fi
 if [ -f "$KUKSA_DDS_BRIDGE" ] && [ -n "$KUKSA_CONTAINER" ]; then
     echo "  - Kuksa-DDS Bridge: bridging Kuksa databroker <-> DDS"
+fi
+if [ -f "$VEP_OTEL_PROBE" ]; then
+    echo "  - VEP OTEL Probe: receiving OTLP metrics on localhost:4317 -> DDS"
+fi
+if [ -f "$VEP_HOST_METRICS" ] && [ -f "$VEP_OTEL_PROBE" ]; then
+    echo "  - VEP Host Metrics: collecting CPU/memory/disk/network every 10s"
 fi
 echo ""
 echo "To replay CAN data:"
