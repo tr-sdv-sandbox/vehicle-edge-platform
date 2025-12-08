@@ -1,14 +1,14 @@
 #!/bin/bash
-# run_aws_ingestion.sh - Run the cloud backend simulator for AWS ingestion
+# run_aws_ingestion.sh - Run the VEP MQTT receiver for AWS ingestion testing
 #
 # Usage: ./run_aws_ingestion.sh [--verbose]
 #
-# This starts the cloud backend simulator which:
-#   - Receives MQTT messages from the VDR exporter
+# This starts the VEP MQTT receiver which:
+#   - Receives MQTT messages from the VEP exporter
 #   - Decodes compressed vehicle data
-#   - Simulates AWS cloud ingestion pipeline
+#   - Displays telemetry for cloud ingestion testing
 #
-# The simulator connects to Mosquitto broker on localhost:1883
+# The receiver connects to Mosquitto broker on localhost:1883
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_DIR="$SCRIPT_DIR/build"
@@ -34,8 +34,8 @@ if [ ! -d "$BUILD_DIR" ]; then
     exit 1
 fi
 
-if [ ! -f "$BUILD_DIR/vep-core/cloud_backend_sim" ]; then
-    echo "Error: cloud_backend_sim not found. Run './build-all.sh' first."
+if [ ! -f "$BUILD_DIR/vep-core/vep_mqtt_receiver" ]; then
+    echo "Error: vep_mqtt_receiver not found. Run './build-all.sh' first."
     exit 1
 fi
 
@@ -47,8 +47,8 @@ else
 fi
 
 echo ""
-echo "Starting cloud backend simulator..."
-echo "  Subscribing to MQTT topic: vdr/vehicle/+"
+echo "Starting VEP MQTT receiver..."
+echo "  Subscribing to MQTT topic: v1/telemetry/+"
 echo "  Decoding and displaying vehicle data"
 if [ -n "$VERBOSE" ]; then
     echo "  Verbose mode: ON"
@@ -57,5 +57,5 @@ echo ""
 echo "Press Ctrl+C to stop."
 echo ""
 
-# Run the cloud backend simulator (foreground)
-exec "$BUILD_DIR/vep-core/cloud_backend_sim" $VERBOSE
+# Run the MQTT receiver (foreground)
+exec "$BUILD_DIR/vep-core/vep_mqtt_receiver" $VERBOSE

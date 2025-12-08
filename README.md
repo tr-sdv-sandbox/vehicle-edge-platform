@@ -100,7 +100,7 @@ View cloud backend output:
 | `build-all.sh` | Build all components |
 | `run_framework.sh` | Start all framework services |
 | `run_canplayer.sh` | Replay CAN data to vcan0 |
-| `run_aws_ingestion.sh` | Run cloud backend simulator |
+| `run_aws_ingestion.sh` | Run MQTT receiver for testing |
 | `run_kuksa_logger.sh` | Log KUKSA databroker values |
 | `validate_mappings.sh` | Validate VSS signal mappings |
 
@@ -130,21 +130,21 @@ After building:
 
 | Binary | Location | Description |
 |--------|----------|-------------|
-| `vdr_vss_can_probe` | `build/vep-core/probes/vss_can/` | CAN → VSS → DDS probe |
-| `vdr_otel_probe` | `build/vep-core/probes/otel/` | OTLP gRPC → DDS probe |
-| `vdr_avtp_probe` | `build/vep-core/probes/avtp/` | IEEE 1722 AVTP → DDS probe |
-| `vdr_exporter` | `build/vep-core/` | DDS → compressed MQTT exporter |
+| `vep_can_probe` | `build/vep-core/probes/vep_can_probe/` | CAN → VSS → DDS probe |
+| `vep_otel_probe` | `build/vep-core/probes/vep_otel_probe/` | OTLP gRPC → DDS probe |
+| `vep_avtp_probe` | `build/vep-core/probes/vep_avtp_probe/` | IEEE 1722 AVTP → DDS probe |
+| `vep_exporter` | `build/vep-core/` | DDS → compressed MQTT exporter |
 | `kuksa_dds_bridge` | `build/vep-core/` | KUKSA ↔ DDS bridge |
 | `rt_dds_bridge` | `build/vep-core/` | RT transport ↔ DDS bridge |
-| `cloud_backend_sim` | `build/vep-core/` | MQTT receiver/decoder |
+| `vep_mqtt_receiver` | `build/vep-core/` | MQTT receiver/decoder |
 
 ## Data Flow
 
-1. **CAN Ingestion**: `vdr_vss_can_probe` reads CAN frames from vcan0
+1. **CAN Ingestion**: `vep_can_probe` reads CAN frames from vcan0
 2. **VSS Transformation**: libvssdag transforms CAN signals to VSS paths using DBC + YAML mappings
 3. **DDS Publishing**: Signals published to DDS bus
-4. **Export**: `vdr_exporter` subscribes, batches, compresses (zstd), sends via MQTT
-5. **Cloud**: `cloud_backend_sim` receives, decompresses, decodes protobuf
+4. **Export**: `vep_exporter` subscribes, batches, compresses (zstd), sends via MQTT
+5. **Cloud**: `vep_mqtt_receiver` receives, decompresses, decodes protobuf
 
 ## Configuration
 

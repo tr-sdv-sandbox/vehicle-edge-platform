@@ -77,24 +77,24 @@ if [ ! -d "$BUILD_DIR" ]; then
 fi
 
 # Binaries from vep-core
-VDR_EXPORTER="$BUILD_DIR/vep-core/vdr_exporter"
+VEP_EXPORTER="$BUILD_DIR/vep-core/vep_exporter"
 KUKSA_DDS_BRIDGE="$BUILD_DIR/vep-core/kuksa_dds_bridge"
 RT_DDS_BRIDGE="$BUILD_DIR/vep-core/rt_dds_bridge"
-CLOUD_BACKEND="$BUILD_DIR/vep-core/cloud_backend_sim"
+VEP_MQTT_RECEIVER="$BUILD_DIR/vep-core/vep_mqtt_receiver"
 
 # Probes from vep-core/probes
-VSS_CAN_PROBE="$BUILD_DIR/vep-core/probes/vss_can/vdr_vss_can_probe"
-OTEL_PROBE="$BUILD_DIR/vep-core/probes/otel/vdr_otel_probe"
-AVTP_PROBE="$BUILD_DIR/vep-core/probes/avtp/vdr_avtp_probe"
+VEP_CAN_PROBE="$BUILD_DIR/vep-core/probes/vep_can_probe/vep_can_probe"
+VEP_OTEL_PROBE="$BUILD_DIR/vep-core/probes/vep_otel_probe/vep_otel_probe"
+VEP_AVTP_PROBE="$BUILD_DIR/vep-core/probes/vep_avtp_probe/vep_avtp_probe"
 
-if [ ! -f "$VDR_EXPORTER" ]; then
-    echo "Error: vdr_exporter not found. Run './build-all.sh' first."
+if [ ! -f "$VEP_EXPORTER" ]; then
+    echo "Error: vep_exporter not found. Run './build-all.sh' first."
     exit 1
 fi
 
-if [ ! -f "$VSS_CAN_PROBE" ]; then
-    echo "Warning: vdr_vss_can_probe not found at $VSS_CAN_PROBE"
-    VSS_CAN_PROBE=""
+if [ ! -f "$VEP_CAN_PROBE" ]; then
+    echo "Warning: vep_can_probe not found at $VEP_CAN_PROBE"
+    VEP_CAN_PROBE=""
 fi
 
 # Setup vcan0 (always needed for CAN replay)
@@ -180,23 +180,23 @@ fi
 
 echo ""
 
-# Start VDR exporter
-echo "Starting VDR exporter..."
-"$VDR_EXPORTER" &
+# Start VEP exporter
+echo "Starting VEP exporter..."
+"$VEP_EXPORTER" &
 PIDS+=($!)
-echo "  vdr_exporter running (PID ${PIDS[-1]})"
+echo "  vep_exporter running (PID ${PIDS[-1]})"
 
 sleep 1
 
-# Start VSS CAN probe (CAN-to-VSS)
-if [ -n "$VSS_CAN_PROBE" ]; then
-    echo "Starting vdr_vss_can_probe (CAN -> VSS -> DDS)..."
-    "$VSS_CAN_PROBE" \
+# Start VEP CAN probe (CAN-to-VSS)
+if [ -n "$VEP_CAN_PROBE" ]; then
+    echo "Starting vep_can_probe (CAN -> VSS -> DDS)..."
+    "$VEP_CAN_PROBE" \
         --config "$CONFIG_DIR/model3_mappings_dag.yaml" \
         --interface vcan0 \
         --dbc "$CONFIG_DIR/Model3CAN.dbc" &
     PIDS+=($!)
-    echo "  vdr_vss_can_probe running (PID ${PIDS[-1]})"
+    echo "  vep_can_probe running (PID ${PIDS[-1]})"
 fi
 
 # Start RT-DDS bridge (DDS <-> RT transport, loopback mode for simulation)
@@ -227,9 +227,9 @@ echo "=================================================="
 echo ""
 echo "Services:"
 echo "  - Mosquitto MQTT broker: localhost:1883"
-echo "  - VDR Exporter: subscribing to DDS, publishing to MQTT"
-if [ -n "$VSS_CAN_PROBE" ]; then
-    echo "  - VSS CAN Probe: listening on vcan0 for CAN traffic"
+echo "  - VEP Exporter: subscribing to DDS, publishing to MQTT"
+if [ -n "$VEP_CAN_PROBE" ]; then
+    echo "  - VEP CAN Probe: listening on vcan0 for CAN traffic"
 fi
 if [ -n "$KUKSA_CONTAINER" ]; then
     echo "  - KUKSA Databroker: localhost:$KUKSA_PORT (container: $KUKSA_CONTAINER)"
@@ -244,8 +244,8 @@ echo ""
 echo "To replay CAN data:"
 echo "  ./run_canplayer.sh"
 echo ""
-echo "To view cloud backend messages:"
-echo "  $CLOUD_BACKEND"
+echo "To view MQTT messages:"
+echo "  $VEP_MQTT_RECEIVER"
 echo ""
 echo "Press Ctrl+C to stop all services."
 echo ""

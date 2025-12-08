@@ -27,6 +27,7 @@ REPOS=(
     "libkuksa-cpp"
     "vep-dds"
     "vep-core"
+    "vep-schema"
 )
 
 echo "=== Vehicle Edge Platform Setup ==="

@@ -13,6 +13,7 @@ REPOS=(
     "libkuksa-cpp"
     "vep-dds"
     "vep-core"
+    "vep-schema"
 )
 
 echo "=== Syncing All Repositories ==="
