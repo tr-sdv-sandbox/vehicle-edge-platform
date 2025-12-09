@@ -58,9 +58,12 @@ if ! docker image inspect "$BUILD_IMAGE" > /dev/null 2>&1; then
 fi
 
 # Build runtime container
+# Always pass CACHEBUST to ensure source code changes are picked up
+# (the build container with dependencies remains cached)
 echo "=== Building UBI minimal runtime container ==="
 docker build \
     --network host \
+    --build-arg CACHEBUST="$(date +%s)" \
     $NO_CACHE \
     -t "$IMAGE_TAG" \
     -f "$SCRIPT_DIR/Dockerfile.runtime.ubi" \

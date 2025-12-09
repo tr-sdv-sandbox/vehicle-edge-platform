@@ -180,11 +180,14 @@ if [ "$BUILD_RUNTIME" = true ]; then
     echo "Building runtime container..."
 
     # Build runtime using buildx - now it can pull from local registry
+    # Always use --no-cache-filter=builder to pick up source code changes
+    # (the builder stage has COPY . . which must not be cached)
     docker buildx build \
         --platform "$PLATFORM" \
         --network host \
         --builder "$BUILDER_NAME" \
         --allow network.host \
+        --no-cache-filter=builder \
         $NO_CACHE \
         -t "$RUNTIME_TAG" \
         -f "$TEMP_DOCKERFILE" \

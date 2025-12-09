@@ -21,6 +21,10 @@
 FROM autosd-vep AS builder
 
 WORKDIR /workspace
+
+# Cache buster - ensures source code changes are always picked up
+# Pass --build-arg CACHEBUST=$(date +%s) to force rebuild
+ARG CACHEBUST=1
 COPY . .
 
 # Build VEP
