@@ -113,6 +113,29 @@ Each component in `components/` has its own `CLAUDE.md` with component-specific 
 -DCMAKE_BUILD_TYPE=Release    # Release or Debug
 ```
 
+## Docker Builds (AutoSD/RHEL)
+
+Container builds for CentOS Stream 9 / RHEL-based automotive OS (AutoSD):
+
+```bash
+cd docker/autosd
+
+# Build development container (one-time, ~4.8GB)
+./build_container.sh
+
+# Build VEP inside container
+./build_autosd.sh
+
+# Create runtime containers
+./build_runtime.sh --slim      # CentOS Stream 9 (~251MB)
+./build_runtime_ubi.sh --slim  # UBI minimal (~148MB, smallest)
+
+# ARM64 cross-compilation (for NXP i.MX, etc.)
+./build_cross.sh --ubi --slim  # Creates vep-autosd-runtime:ubi-arm64 (~156MB)
+```
+
+See `docker/autosd/README.md` for detailed documentation.
+
 ## IDL Message Types
 
 DDS message definitions are generated from IFEX schemas in `components/vep-schema/`. Key types (in `vep::` namespace):

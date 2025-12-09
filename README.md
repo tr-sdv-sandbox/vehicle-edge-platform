@@ -48,7 +48,8 @@ A modular edge computing platform for vehicle data acquisition, transformation, 
 | **libvss-types** | VSS (Vehicle Signal Specification) type definitions |
 | **libvssdag** | CAN-to-VSS signal transformation using DAG mappings |
 | **libkuksa-cpp** | C++ client for KUKSA.val databroker |
-| **vep-dds** | DDS utilities and wrappers (vdr_common library) |
+| **vep-dds** | DDS utilities and wrappers (vep_dds_common library) |
+| **vep-schema** | DDS message types (IFEX → IDL generation) |
 | **vep-core** | Probes, bridges, and exporters |
 
 ## Quick Start
@@ -113,13 +114,17 @@ vehicle-edge-platform/
 │   ├── libvssdag/
 │   ├── libkuksa-cpp/
 │   ├── vep-dds/
+│   ├── vep-schema/
 │   └── vep-core/
 ├── config/               # Test configuration files
 │   ├── candump.log       # Sample CAN data
 │   ├── Model3CAN.dbc     # CAN database (signal definitions)
 │   ├── model3_mappings_dag.yaml  # CAN-to-VSS mappings
 │   └── vss-5.1-kuksa.json        # VSS specification
+├── docker/               # Container builds
+│   └── autosd/           # AutoSD/RHEL builds (CentOS, UBI, ARM64)
 ├── build/                # Build output (created by build-all.sh)
+├── build-autosd/         # Docker build output
 ├── CMakeLists.txt        # Top-level CMake
 └── *.sh                  # Utility scripts
 ```
@@ -154,6 +159,41 @@ After building:
 3. **DDS Bridge**: `vep_otel_probe` converts OTEL metrics to DDS messages
 4. **Cloud Export**: `vep_exporter` batches metrics and sends via MQTT
 5. **Display**: `vep_mqtt_receiver` shows metrics with service labels (`service=vep_host_metrics@hostname`)
+
+## Docker Builds (AutoSD/RHEL)
+
+For containerized deployments targeting CentOS Stream 9 / RHEL-based automotive OS:
+
+```bash
+cd docker/autosd
+
+# Build development container (~4.8GB, includes all build tools)
+./build_container.sh
+
+# Build VEP binaries inside container (output: build-autosd/)
+./build_autosd.sh
+
+# Create minimal runtime containers
+./build_runtime.sh --slim      # CentOS Stream 9 (~251MB)
+./build_runtime_ubi.sh --slim  # UBI minimal (~148MB)
+
+# ARM64 cross-compilation (QEMU-based, for NXP i.MX, etc.)
+./build_cross.sh --ubi --slim  # Creates vep-autosd-runtime:ubi-arm64 (~156MB)
+```
+
+| Image | Size | Description |
+|-------|------|-------------|
+| `autosd-vep` | ~4.8GB | Full build environment |
+| `vep-autosd-runtime` | ~251MB | CentOS Stream 9 runtime |
+| `vep-autosd-runtime:ubi` | ~148MB | UBI minimal runtime |
+| `vep-autosd-runtime:ubi-arm64` | ~156MB | ARM64 UBI runtime |
+
+Run the runtime container:
+```bash
+docker run -it --privileged --network host vep-autosd-runtime:ubi
+```
+
+See `docker/autosd/README.md` for detailed documentation.
 
 ## Configuration
 
