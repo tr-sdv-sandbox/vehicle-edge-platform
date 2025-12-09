@@ -20,6 +20,20 @@ REPOS=(
 echo "=== Syncing All Repositories ==="
 echo ""
 
+# Sync workspace first
+echo "[vehicle-edge-platform] Pulling latest..."
+cd "$SCRIPT_DIR"
+git fetch origin
+if ! git diff --quiet HEAD; then
+    echo "  WARNING: Local changes detected, skipping pull"
+    git status --short
+else
+    git pull --ff-only origin main 2>/dev/null || \
+    echo "  WARNING: Could not fast-forward, manual merge may be needed"
+fi
+echo ""
+
+# Sync components
 for repo in "${REPOS[@]}"; do
     if [ -d "$COMPONENTS_DIR/$repo" ]; then
         echo "[$repo] Pulling latest..."
