@@ -1,0 +1,17 @@
+# Build directories - exclude host build artifacts
+build
+build-autosd
+
+# Git
+.git
+
+# IDE and editor files
+.vscode
+.idea
+*.swp
+*.swo
+*~
+
+# Logs and temporary files
+*.log
+*.tmp
