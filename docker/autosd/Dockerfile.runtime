@@ -1,0 +1,112 @@
+# AutoSD Runtime Container for Vehicle Edge Platform
+# Multi-stage build using existing autosd-vep as build base
+#
+# Usage:
+#   # First ensure build container exists
+#   ./build_container.sh
+#
+#   # Build runtime image
+#   docker build --network host -t vep-autosd-runtime -f Dockerfile.runtime ../..
+#
+#   # Run
+#   docker run -it --privileged --network host vep-autosd-runtime
+#
+# For cross-architecture:
+#   # Build autosd-vep for target arch first, then:
+#   docker buildx build --platform linux/arm64 -t vep-autosd-runtime:arm64 -f Dockerfile.runtime ../..
+
+# =============================================================================
+# STAGE 1: BUILD (uses existing autosd-vep with all tools/deps)
+# =============================================================================
+FROM autosd-vep AS builder
+
+WORKDIR /workspace
+COPY . .
+
+# Build VEP
+RUN mkdir -p build && cd build && \
+    cmake .. \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DVEP_BUILD_TESTS=OFF \
+        -DVEP_BUILD_EXAMPLES=OFF && \
+    cmake --build . -j$(nproc)
+
+# Strip binaries
+RUN find /workspace/build -type f -executable ! -name "*.sh" -exec file {} \; | \
+    grep -E "ELF.*executable|ELF.*shared object" | cut -d: -f1 | \
+    xargs -r strip --strip-unneeded 2>/dev/null || true
+
+# =============================================================================
+# STAGE 2: RUNTIME (minimal CentOS with only runtime deps)
+# =============================================================================
+FROM quay.io/centos/centos:stream9 AS runtime
+
+LABEL maintainer="Vehicle Edge Platform"
+LABEL description="AutoSD runtime for vehicle-edge-platform"
+
+# Enable EPEL
+RUN dnf install -y epel-release && dnf update -y
+
+# Runtime dependencies only (no -devel packages)
+# Note: --allowerasing needed to replace libcurl-minimal with libcurl
+RUN dnf install -y --allowerasing \
+        lua \
+        yaml-cpp \
+        libzstd \
+        mosquitto \
+        openssl-libs \
+        libcurl \
+        can-utils \
+        iproute \
+    && dnf clean all \
+    && rm -rf /var/cache/dnf
+
+# Copy only required shared libraries (not compiler libs like libprotoc)
+# Use shell to expand globs in a RUN command after COPY
+COPY --from=builder /usr/local/lib64/ /tmp/lib64/
+COPY --from=builder /usr/local/lib/ /tmp/lib/
+
+# Move only needed libraries, exclude compiler/dev libs
+RUN mkdir -p /usr/local/lib64 /usr/local/lib && \
+    # From lib64: glog, protobuf (not protoc), abseil, cyclonedds
+    mv /tmp/lib64/libglog*.so* /usr/local/lib64/ && \
+    mv /tmp/lib64/libprotobuf.so* /usr/local/lib64/ && \
+    mv /tmp/lib64/libprotobuf-lite.so* /usr/local/lib64/ && \
+    mv /tmp/lib64/libabsl*.so* /usr/local/lib64/ && \
+    mv /tmp/lib64/libddsc*.so* /usr/local/lib64/ && \
+    mv /tmp/lib64/libre2*.so* /usr/local/lib64/ 2>/dev/null || true && \
+    # From lib: gflags, grpc (core only), dbcppp
+    mv /tmp/lib/libgflags.so* /usr/local/lib/ && \
+    mv /tmp/lib/libgrpc.so* /usr/local/lib/ && \
+    mv /tmp/lib/libgrpc++.so* /usr/local/lib/ && \
+    mv /tmp/lib/libgpr.so* /usr/local/lib/ && \
+    mv /tmp/lib/libupb*.so* /usr/local/lib/ && \
+    mv /tmp/lib/libaddress_sorting.so* /usr/local/lib/ && \
+    mv /tmp/lib/libutf8_range*.so* /usr/local/lib/ && \
+    mv /tmp/lib/libdbcppp.so* /usr/local/lib/ && \
+    mv /tmp/lib/libxmlmm.so* /usr/local/lib/ 2>/dev/null || true && \
+    # Cleanup temp directories
+    rm -rf /tmp/lib64 /tmp/lib
+
+# Copy VEP binaries
+COPY --from=builder /workspace/build/vep-core/vep_exporter /usr/local/bin/
+COPY --from=builder /workspace/build/vep-core/vep_mqtt_receiver /usr/local/bin/
+COPY --from=builder /workspace/build/vep-core/kuksa_dds_bridge /usr/local/bin/
+COPY --from=builder /workspace/build/vep-core/rt_dds_bridge /usr/local/bin/
+COPY --from=builder /workspace/build/vep-core/probes/vep_can_probe/vep_can_probe /usr/local/bin/
+COPY --from=builder /workspace/build/vep-core/probes/vep_otel_probe/vep_otel_probe /usr/local/bin/
+COPY --from=builder /workspace/build/vep-core/tools/vep_host_metrics/vep_host_metrics /usr/local/bin/
+
+# Copy configuration files
+COPY --from=builder /workspace/config /etc/vep/config
+
+# Update library cache
+RUN ldconfig
+
+# Environment
+ENV LD_LIBRARY_PATH=/usr/local/lib:/usr/local/lib64
+ENV PATH=/usr/local/bin:${PATH}
+
+WORKDIR /etc/vep
+
+CMD ["/bin/bash"]

@@ -1,0 +1,273 @@
+# AutoSD Development Container for Vehicle Edge Platform
+# Build incrementally - uncomment stages as dependencies are verified
+#
+# Usage (IMPORTANT: --network host required for git clone during build):
+#   docker build --network host -t autosd-vep -f Dockerfile.autosd .
+#   docker run -it --privileged --network host -v $(pwd):/workspace autosd-vep /bin/bash
+
+FROM quay.io/centos/centos:stream9
+
+LABEL maintainer="Vehicle Edge Platform"
+LABEL description="AutoSD-compatible build environment for vehicle-edge-platform"
+
+# =============================================================================
+# STAGE 1: Base system and build tools
+# =============================================================================
+
+# Enable CRB (CodeReady Builder) for development packages
+RUN dnf install -y dnf-plugins-core && \
+    dnf config-manager --set-enabled crb && \
+    dnf install -y epel-release && \
+    dnf update -y
+
+# Core build tools (equivalent to build-essential)
+# Note: --allowerasing needed to replace curl-minimal with curl
+RUN dnf groupinstall -y "Development Tools" && \
+    dnf install -y --allowerasing \
+        cmake \
+        git \
+        pkgconf-pkg-config \
+        wget \
+        curl \
+        which \
+        vim \
+        sudo
+
+# =============================================================================
+# STAGE 2: System libraries available via DNF
+# =============================================================================
+
+# Testing frameworks (gtest/gmock from dnf work fine)
+# Note: glog/gflags built from source below for proper CMake support
+RUN dnf install -y \
+        gtest-devel \
+        gmock-devel
+
+# Data format libraries
+# Ubuntu: liblua5.4-dev, libyaml-cpp-dev, nlohmann-json3-dev
+RUN dnf install -y \
+        lua-devel \
+        yaml-cpp-devel \
+        json-devel
+
+# Compression and utilities
+# Ubuntu: libzstd-dev, can-utils
+RUN dnf install -y \
+        libzstd-devel \
+        can-utils
+
+# MQTT client library
+# Ubuntu: libmosquitto-dev
+RUN dnf install -y mosquitto-devel || echo "mosquitto-devel not found, will build from source"
+
+# SSL/TLS and other common dependencies
+# libxml2 and boost needed for dbcppp (DBC parser)
+RUN dnf install -y \
+        openssl-devel \
+        libcurl-devel \
+        libxml2-devel \
+        boost-devel
+
+# =============================================================================
+# STAGE 3: Python ecosystem
+# =============================================================================
+
+RUN dnf install -y \
+        python3 \
+        python3-pip \
+        python3-devel \
+        python3-pyyaml \
+        python3-flask
+
+# Python packages via pip (some may not be in dnf)
+RUN pip3 install --no-cache-dir \
+        grpcio \
+        protobuf \
+        flask-cors
+
+# =============================================================================
+# STAGE 4: gflags and glog (BUILD FROM SOURCE for CMake support)
+# CentOS packages don't provide CMake config files
+# =============================================================================
+
+# Install gflags (required by glog)
+ARG GFLAGS_VERSION=2.2.2
+RUN cd /tmp && \
+    git clone --depth 1 --branch v${GFLAGS_VERSION} https://github.com/gflags/gflags.git && \
+    cd gflags && \
+    mkdir build && cd build && \
+    cmake -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_INSTALL_PREFIX=/usr/local \
+          -DBUILD_SHARED_LIBS=ON \
+          -DBUILD_STATIC_LIBS=ON \
+          -DBUILD_gflags_LIB=ON \
+          .. && \
+    make -j$(nproc) && \
+    make install && \
+    ldconfig && \
+    rm -rf /tmp/gflags
+
+# Install glog (depends on gflags)
+ARG GLOG_VERSION=0.6.0
+RUN cd /tmp && \
+    git clone --depth 1 --branch v${GLOG_VERSION} https://github.com/google/glog.git && \
+    cd glog && \
+    mkdir build && cd build && \
+    cmake -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_INSTALL_PREFIX=/usr/local \
+          -DBUILD_SHARED_LIBS=ON \
+          -DWITH_GFLAGS=ON \
+          -DWITH_GTEST=OFF \
+          .. && \
+    make -j$(nproc) && \
+    make install && \
+    ldconfig && \
+    rm -rf /tmp/glog
+
+# =============================================================================
+# STAGE 5: gRPC and Protocol Buffers (BUILD FROM SOURCE)
+# Ubuntu: libgrpc++-dev, libprotobuf-dev, protobuf-compiler,
+#         protobuf-compiler-grpc, libabsl-dev
+# =============================================================================
+
+# Install abseil-cpp (required by grpc and protobuf)
+ARG ABSEIL_VERSION=20240116.2
+RUN cd /tmp && \
+    git clone --depth 1 --branch ${ABSEIL_VERSION} https://github.com/abseil/abseil-cpp.git && \
+    cd abseil-cpp && \
+    mkdir build && cd build && \
+    cmake -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_INSTALL_PREFIX=/usr/local \
+          -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+          -DBUILD_SHARED_LIBS=ON \
+          -DABSL_BUILD_TESTING=OFF \
+          -DABSL_PROPAGATE_CXX_STD=ON \
+          .. && \
+    make -j$(nproc) && \
+    make install && \
+    ldconfig && \
+    rm -rf /tmp/abseil-cpp
+
+# Install protobuf (shared libs to avoid abseil ABI issues)
+ARG PROTOBUF_VERSION=25.1
+RUN cd /tmp && \
+    git clone --depth 1 --branch v${PROTOBUF_VERSION} https://github.com/protocolbuffers/protobuf.git && \
+    cd protobuf && \
+    git submodule update --init --recursive && \
+    mkdir build && cd build && \
+    cmake -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_INSTALL_PREFIX=/usr/local \
+          -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+          -DBUILD_SHARED_LIBS=ON \
+          -Dprotobuf_BUILD_TESTS=OFF \
+          -Dprotobuf_ABSL_PROVIDER=package \
+          .. && \
+    make -j$(nproc) && \
+    make install && \
+    ldconfig && \
+    rm -rf /tmp/protobuf
+
+# Install gRPC - Step 1: Clone (cached separately for faster rebuilds)
+ARG GRPC_VERSION=1.60.0
+RUN cd /tmp && \
+    git clone --depth 1 --branch v${GRPC_VERSION} https://github.com/grpc/grpc.git && \
+    cd grpc && \
+    git submodule update --init --recursive
+
+# Install gRPC - Step 2: Build (shared libs)
+RUN cd /tmp/grpc && \
+    mkdir build && cd build && \
+    cmake -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_INSTALL_PREFIX=/usr/local \
+          -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+          -DBUILD_SHARED_LIBS=ON \
+          -DgRPC_INSTALL=ON \
+          -DgRPC_BUILD_TESTS=OFF \
+          -DgRPC_ABSL_PROVIDER=package \
+          -DgRPC_PROTOBUF_PROVIDER=package \
+          -DgRPC_SSL_PROVIDER=package \
+          -DgRPC_ZLIB_PROVIDER=package \
+          .. && \
+    make -j$(nproc) && \
+    make install && \
+    ldconfig && \
+    rm -rf /tmp/grpc
+
+# =============================================================================
+# STAGE 6: CycloneDDS (BUILD FROM SOURCE)
+# Ubuntu: cyclonedds-dev, cyclonedds-tools
+# =============================================================================
+
+ARG CYCLONEDDS_VERSION=0.10.5
+RUN cd /tmp && \
+    git clone --depth 1 --branch ${CYCLONEDDS_VERSION} https://github.com/eclipse-cyclonedds/cyclonedds.git && \
+    cd cyclonedds && \
+    mkdir build && cd build && \
+    cmake -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_INSTALL_PREFIX=/usr/local \
+          -DBUILD_EXAMPLES=OFF \
+          -DBUILD_TESTING=OFF \
+          .. && \
+    make -j$(nproc) && \
+    make install && \
+    ldconfig && \
+    rm -rf /tmp/cyclonedds
+
+# =============================================================================
+# STAGE 7: Vehicle Edge Platform specific dependencies
+# =============================================================================
+
+# concurrentqueue - lock-free queue for libvssdag (header-only library)
+# Use CMake install for proper Config.cmake generation
+RUN cd /tmp && \
+    git clone https://github.com/cameron314/concurrentqueue.git && \
+    cd concurrentqueue && \
+    rm -rf build && mkdir build && cd build && \
+    cmake -DCMAKE_INSTALL_PREFIX=/usr/local .. && \
+    make install && \
+    rm -rf /tmp/concurrentqueue
+
+# dbcppp - DBC file parser for libvssdag
+RUN cd /tmp && \
+    git clone --recurse-submodules https://github.com/xR3b0rn/dbcppp.git && \
+    cd dbcppp && \
+    mkdir build && cd build && \
+    cmake -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_INSTALL_PREFIX=/usr/local \
+          .. && \
+    make -j$(nproc) && \
+    make install && \
+    ldconfig && \
+    rm -rf /tmp/dbcppp
+
+# =============================================================================
+# STAGE 8: nlohmann-json (if not available via dnf)
+# =============================================================================
+
+# Check if json-devel provides nlohmann, if not build from source
+RUN if ! rpm -q json-devel > /dev/null 2>&1; then \
+        cd /tmp && \
+        git clone --depth 1 --branch v3.11.3 https://github.com/nlohmann/json.git && \
+        cd json && \
+        mkdir build && cd build && \
+        cmake -DCMAKE_INSTALL_PREFIX=/usr/local \
+              -DJSON_BuildTests=OFF \
+              .. && \
+        make install && \
+        rm -rf /tmp/json; \
+    fi
+
+# =============================================================================
+# Environment setup
+# =============================================================================
+
+# Update library path
+ENV LD_LIBRARY_PATH=/usr/local/lib:/usr/local/lib64:${LD_LIBRARY_PATH}
+ENV PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:/usr/local/lib64/pkgconfig:${PKG_CONFIG_PATH}
+ENV PATH=/usr/local/bin:${PATH}
+
+# Create workspace
+WORKDIR /workspace
+
+# Default command
+CMD ["/bin/bash"]

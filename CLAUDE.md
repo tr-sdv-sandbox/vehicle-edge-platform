@@ -54,7 +54,9 @@ sudo ip link set up vcan0
 2. **libvssdag** - CAN→VSS transformation using DAG + embedded Lua transforms
 3. **libkuksa-cpp** - Type-safe C++ client for KUKSA.val databroker (gRPC)
 4. **vep-dds** - DDS utilities (vep_dds_common library), RAII wrappers around CycloneDDS C API
-5. **vep-core** - Probes, bridges, and exporters
+5. **vep-schema** - IDL message definitions in COVESA IFEX format (generates IDL for DDS)
+6. **vep-core** - Probes, bridges, and exporters
+7. **covesa-ifex-core** - (optional) COVESA IFEX vehicle orchestration services
 
 **DDS Topics:** `rt/vss/signals` (sensors), `rt/vss/actuators/target`, `rt/vss/actuators/actual`
 
@@ -78,7 +80,7 @@ sudo ip link set up vcan0
 ## Code Conventions
 
 - **Languages:** C++17 (primary), Lua (embedded transforms), Protobuf (wire format)
-- **Namespaces:** `vss::types::`, `vssdag::`, `kuksa::`, `dds::`, `utils::`
+- **Namespaces:** `vss::types::`, `vssdag::`, `kuksa::`, `dds::`, `vep::` (IDL types), `utils::`
 - **Naming:** snake_case functions, trailing underscore members (`nodes_`), UPPER_CASE constants
 - **Logging:** glog (`LOG(INFO)`, `LOG(ERROR)`, `CHECK`, `DCHECK`)
 - **Testing:** Google Test in `tests/` directories
@@ -100,6 +102,7 @@ Each component in `components/` has its own `CLAUDE.md` with component-specific 
 - `components/libkuksa-cpp/USAGE.md` - Complete client library API reference
 - `components/vep-core/ARCHITECTURE.md` - System architecture and data flows
 - `components/vep-dds/CLAUDE.md` - DDS wrapper patterns, IDL topic naming, vep_dds_common library
+- `components/vep-schema/README.md` - Message types, topic naming, QoS recommendations
 
 ## CMake Options
 
