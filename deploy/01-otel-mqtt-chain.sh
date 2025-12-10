@@ -5,8 +5,12 @@
 #   vep_host_metrics -> OTLP gRPC -> vep_otel_probe -> DDS -> vep_exporter -> MQTT -> vep_mqtt_receiver
 #
 # Usage:
-#   ./01-otel-mqtt-chain.sh              # Dev mode (x86_64, starts MQTT broker)
-#   TARGET=1 ./01-otel-mqtt-chain.sh     # Target mode (ARM64, uses onboard MQTT)
+#   ./01-otel-mqtt-chain.sh              # Dev mode (x86_64)
+#   TARGET=1 ./01-otel-mqtt-chain.sh     # Target mode (ARM64)
+#
+# Prerequisites:
+#   Dev mode:    docker images available (vep-autosd-runtime:ubi, eclipse-mosquitto:2)
+#   Target mode: podman images pre-loaded (use pull-mosquitto-arm64.sh + push-image-to-target.sh)
 #
 # Press Ctrl+C to stop all services.
 
@@ -17,25 +21,24 @@ set -e
 # =============================================================================
 
 # TARGET mode: set to "1" for ARM64 target deployment
-# Dev mode (default): x86_64 containers, starts local MQTT broker
-# Target mode: ARM64 containers, uses existing onboard MQTT broker
+# Dev mode (default): x86_64 containers
+# Target mode: ARM64 containers
 TARGET="${TARGET:-}"
 
 if [ -n "$TARGET" ]; then
     # Target deployment (ARM64)
     VEP_IMAGE="docker.io/library/vep-autosd-runtime:ubi-arm64"
+    MOSQUITTO_IMAGE="docker.io/eclipse-mosquitto:2"
     CONTAINER_PLATFORM="--arch arm64"
-    START_MQTT_BROKER="false"
-    MQTT_BROKER="${MQTT_BROKER:-localhost}"  # Override if broker is on different host
 else
     # Dev deployment (x86_64)
     VEP_IMAGE="vep-autosd-runtime:ubi"
+    MOSQUITTO_IMAGE="docker.io/eclipse-mosquitto:2"
     CONTAINER_PLATFORM=""
-    START_MQTT_BROKER="true"
-    MQTT_BROKER="localhost"
 fi
 
 # MQTT settings
+MQTT_BROKER="localhost"
 MQTT_PORT="${MQTT_PORT:-1883}"
 
 # OTEL settings
@@ -79,45 +82,44 @@ echo "VEP Deployment: OTEL -> MQTT Chain"
 echo "============================================================"
 echo ""
 echo "Configuration:"
-echo "  Mode:          $MODE_DESC"
-echo "  VEP Image:     $VEP_IMAGE"
-echo "  MQTT Broker:   $MQTT_BROKER:$MQTT_PORT"
-echo "  Start Broker:  $START_MQTT_BROKER"
+echo "  Mode:           $MODE_DESC"
+echo "  VEP Image:      $VEP_IMAGE"
+echo "  Mosquitto:      $MOSQUITTO_IMAGE"
+echo "  MQTT Broker:    $MQTT_BROKER:$MQTT_PORT"
 echo ""
 
-# Sync image from docker to podman (dev mode only)
+# Sync images from docker to podman (dev mode only)
 if [ -z "$TARGET" ]; then
-    echo "Syncing image from docker to podman..."
+    echo "Syncing images from docker to podman..."
     docker save "$VEP_IMAGE" | podman load
+    docker save "$MOSQUITTO_IMAGE" | podman load
+    echo ""
 fi
 
 # -----------------------------------------------------------------------------
-# Step 1: Start MQTT Broker (dev mode only)
+# Step 1: Start MQTT Broker
 # -----------------------------------------------------------------------------
-if [ "$START_MQTT_BROKER" = "true" ]; then
-    echo "[1/5] Starting MQTT broker..."
+echo "[1/5] Starting MQTT broker..."
 
-    MQTT_CONTAINER="${CONTAINER_PREFIX}-mqtt"
-    CONTAINERS+=("$MQTT_CONTAINER")
+MQTT_CONTAINER="${CONTAINER_PREFIX}-mqtt"
+CONTAINERS+=("$MQTT_CONTAINER")
 
-    podman run -d \
-        --name "$MQTT_CONTAINER" \
-        --network host \
-        docker.io/eclipse-mosquitto:2 \
-        sh -c 'echo -e "listener 1883\nallow_anonymous true" > /tmp/mosquitto.conf && mosquitto -c /tmp/mosquitto.conf'
+podman run -d \
+    --name "$MQTT_CONTAINER" \
+    $CONTAINER_PLATFORM \
+    --network host \
+    "$MOSQUITTO_IMAGE" \
+    sh -c 'echo -e "listener 1883\nallow_anonymous true" > /tmp/mosquitto.conf && mosquitto -c /tmp/mosquitto.conf'
 
-    # Wait for broker to be ready
-    echo "  Waiting for MQTT broker..."
-    for i in $(seq 1 10); do
-        if nc -z $MQTT_BROKER $MQTT_PORT 2>/dev/null; then
-            echo "  MQTT broker ready on $MQTT_BROKER:$MQTT_PORT"
-            break
-        fi
-        sleep 0.5
-    done
-else
-    echo "[1/5] Using onboard MQTT broker at $MQTT_BROKER:$MQTT_PORT"
-fi
+# Wait for broker to be ready
+echo "  Waiting for MQTT broker..."
+for i in $(seq 1 10); do
+    if nc -z $MQTT_BROKER $MQTT_PORT 2>/dev/null; then
+        echo "  MQTT broker ready on $MQTT_BROKER:$MQTT_PORT"
+        break
+    fi
+    sleep 0.5
+done
 echo ""
 
 # -----------------------------------------------------------------------------
