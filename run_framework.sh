@@ -276,8 +276,8 @@ fi
 if [ -f "$VEP_HOST_METRICS" ] && [ -f "$VEP_OTEL_PROBE" ]; then
     echo "Starting vep_host_metrics (Linux metrics -> OTLP)..."
     "$VEP_HOST_METRICS" \
-        --endpoint=localhost:4317 \
-        --interval=10 &
+        --endpoint localhost:4317 \
+        --interval 10 &
     PIDS+=($!)
     echo "  vep_host_metrics running (PID ${PIDS[-1]})"
 fi
