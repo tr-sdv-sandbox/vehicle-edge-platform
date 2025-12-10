@@ -68,7 +68,8 @@ vep_can_probe supports two CAN transports:
 
 ```bash
 ./run_framework.sh            # Start all services (KUKSA, probes, bridges, exporter)
-./run_canplayer.sh            # Replay CAN data to vcan0 (in another terminal)
+./run_canplayer.sh            # Replay CAN data to vcan0 (SocketCAN)
+./run_avtp_canplayer.sh       # Replay CAN data over IEEE 1722 AVTP
 ./run_aws_ingestion.sh        # View MQTT receiver output
 ./run_kuksa_logger.sh         # Log KUKSA databroker values
 ./validate_mappings.sh        # Validate VSS signal mappings against spec

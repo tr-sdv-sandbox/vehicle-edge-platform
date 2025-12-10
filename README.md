@@ -99,8 +99,10 @@ View cloud backend output:
 | `setup.sh` | Clone all component repositories |
 | `sync-all.sh` | Pull latest changes from all repos |
 | `build-all.sh` | Build all components |
-| `run_framework.sh` | Start all framework services |
-| `run_canplayer.sh` | Replay CAN data to vcan0 |
+| `run_framework.sh` | Start all framework services (SocketCAN) |
+| `run_framework_avtp.sh` | Start all framework services (IEEE 1722 AVTP) |
+| `run_canplayer.sh` | Replay CAN data to vcan0 (SocketCAN) |
+| `run_avtp_canplayer.sh` | Replay CAN data over IEEE 1722 AVTP |
 | `run_aws_ingestion.sh` | Run MQTT receiver for testing |
 | `run_kuksa_logger.sh` | Log KUKSA databroker values |
 | `validate_mappings.sh` | Validate VSS signal mappings |
@@ -143,6 +145,8 @@ After building:
 | `rt_dds_bridge` | `build/vep-core/` | RT transport ↔ DDS bridge |
 | `vep_mqtt_receiver` | `build/vep-core/` | MQTT receiver/decoder |
 | `vep_host_metrics` | `build/vep-core/tools/vep_host_metrics/` | Linux host metrics → OTLP |
+| `avtp_canplayer` | `build/libvssdag/tools/avtp_canplayer/` | Replay candump logs over AVTP |
+| `avtp_test_sender` | `build/libvssdag/tools/avtp_test_sender/` | Send test AVTP CAN frames |
 
 ## Data Flow
 
@@ -196,6 +200,34 @@ sudo ip link set up vcan0
 ```
 
 Containers need `--network host` to access host's vcan interfaces.
+
+### AVTP Tools
+
+libvssdag includes tools for testing and replaying CAN data over IEEE 1722 AVTP:
+
+**avtp_canplayer** - Replay candump log files over AVTP (like `canplayer` but over Ethernet):
+```bash
+# Basic replay with timestamps
+./run_avtp_canplayer.sh eth0 config/candump.log
+
+# Or directly:
+sudo ./build/libvssdag/tools/avtp_canplayer/avtp_canplayer \
+    -I config/candump.log --interface eth0
+
+# Options:
+#   --speed 2.0       Playback at 2x speed
+#   --loop            Loop continuously
+#   --no-timestamps   Send as fast as possible
+#   --interval 10     Fixed 10ms between frames
+```
+
+**avtp_test_sender** - Send individual test CAN frames:
+```bash
+sudo ./build/libvssdag/tools/avtp_test_sender/avtp_test_sender \
+    --interface eth0 --can-id 0x123 --data "01 02 03 04"
+```
+
+Supports both standard (11-bit) and extended (29-bit J1939) CAN IDs.
 
 ## Docker Builds (AutoSD/RHEL)
 
