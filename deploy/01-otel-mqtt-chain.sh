@@ -23,9 +23,9 @@ TARGET="${TARGET:-}"
 
 if [ -n "$TARGET" ]; then
     # Target deployment (ARM64)
-    VEP_IMAGE="vep-autosd-runtime:ubi-arm64"
+    VEP_IMAGE="docker.io/library/vep-autosd-runtime:ubi-arm64"
     CONTAINER_PLATFORM="--arch arm64"
-    START_MQTT_BROKER="false"
+    START_MQTT_BROKER="true"
     MQTT_BROKER="${MQTT_BROKER:-localhost}"  # Override if broker is on different host
 else
     # Dev deployment (x86_64)
