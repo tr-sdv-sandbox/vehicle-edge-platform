@@ -110,6 +110,30 @@ fi
 echo ""
 
 # ==============================================================================
+# Open1722 (IEEE 1722 AVTP library for CAN-over-Ethernet)
+# ==============================================================================
+echo "=== Installing Open1722 ==="
+
+if pkg-config --exists open1722 2>/dev/null; then
+    echo "Open1722 already installed, skipping"
+else
+    cd /tmp
+    rm -rf Open1722
+    git clone --depth 1 https://github.com/COVESA/Open1722.git
+    cd Open1722
+    mkdir -p build && cd build
+    cmake -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_INSTALL_PREFIX=/usr/local \
+          ..
+    make -j$(nproc)
+    $SUDO make install
+    $SUDO ldconfig
+    echo "Open1722 installed"
+fi
+
+echo ""
+
+# ==============================================================================
 # Summary
 # ==============================================================================
 echo "=== Installation Complete ==="
@@ -127,6 +151,7 @@ echo "  - CAN utilities"
 echo "  - Python3 + gRPC/Flask (for IFEX)"
 echo "  - concurrentqueue"
 echo "  - dbcppp"
+echo "  - Open1722 (IEEE 1722 AVTP)"
 echo ""
 echo "Note: Mosquitto broker runs via Docker (eclipse-mosquitto:2)"
 echo "      KUKSA databroker runs via Docker (ghcr.io/eclipse-kuksa/kuksa-databroker:0.6.0)"

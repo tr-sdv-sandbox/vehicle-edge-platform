@@ -194,7 +194,23 @@ RUN cd /tmp/grpc && \
     rm -rf /tmp/grpc
 
 # =============================================================================
-# STAGE 6: CycloneDDS (BUILD FROM SOURCE)
+# STAGE 6: Open1722 (IEEE 1722 AVTP library for CAN-over-Ethernet)
+# =============================================================================
+
+RUN cd /tmp && \
+    git clone --depth 1 https://github.com/COVESA/Open1722.git && \
+    cd Open1722 && \
+    mkdir build && cd build && \
+    cmake -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_INSTALL_PREFIX=/usr/local \
+          .. && \
+    make -j$(nproc) && \
+    make install && \
+    ldconfig && \
+    rm -rf /tmp/Open1722
+
+# =============================================================================
+# STAGE 7: CycloneDDS (BUILD FROM SOURCE)
 # Ubuntu: cyclonedds-dev, cyclonedds-tools
 # =============================================================================
 
@@ -214,7 +230,7 @@ RUN cd /tmp && \
     rm -rf /tmp/cyclonedds
 
 # =============================================================================
-# STAGE 7: Vehicle Edge Platform specific dependencies
+# STAGE 8: Vehicle Edge Platform specific dependencies
 # =============================================================================
 
 # concurrentqueue - lock-free queue for libvssdag (header-only library)
@@ -241,7 +257,7 @@ RUN cd /tmp && \
     rm -rf /tmp/dbcppp
 
 # =============================================================================
-# STAGE 8: nlohmann-json (if not available via dnf)
+# STAGE 9: nlohmann-json (if not available via dnf)
 # =============================================================================
 
 # Check if json-devel provides nlohmann, if not build from source
