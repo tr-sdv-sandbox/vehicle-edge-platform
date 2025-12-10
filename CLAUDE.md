@@ -32,6 +32,38 @@ sudo ip link add dev vcan0 type vcan
 sudo ip link set up vcan0
 ```
 
+## CAN Transport Options
+
+vep_can_probe supports two CAN transports:
+
+| Transport | Interface | Use Case |
+|-----------|-----------|----------|
+| `socketcan` | vcan0, can0 | Standard Linux CAN interfaces |
+| `avtp` | eth0, enp0s3 | IEEE 1722 AVTP over Ethernet (for targets without vcan) |
+
+```bash
+# SocketCAN (default)
+./vep_can_probe --config mappings.yaml --interface vcan0 --dbc model3.dbc
+
+# AVTP over Ethernet
+./vep_can_probe --config mappings.yaml --interface eth0 --dbc model3.dbc --transport avtp
+```
+
+### Permissions
+
+**AVTP Transport (IEEE 1722)** - Requires raw Ethernet sockets:
+
+| Environment | Command |
+|-------------|---------|
+| Standalone (root) | `sudo ./vep_can_probe --transport avtp ...` |
+| Standalone (capability) | `sudo setcap cap_net_raw+ep ./vep_can_probe` |
+| Container | `docker run --cap-add NET_RAW --network host ...` |
+| Container (privileged) | `docker run --privileged --network host ...` |
+
+**SocketCAN** - Requires vcan setup on host:
+- Containers need `--network host` to access host's vcan interfaces
+- No special capabilities required beyond vcan kernel module
+
 ## Running the Framework
 
 ```bash
