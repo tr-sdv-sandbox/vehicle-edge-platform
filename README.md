@@ -160,6 +160,43 @@ After building:
 4. **Cloud Export**: `vep_exporter` batches metrics and sends via MQTT
 5. **Display**: `vep_mqtt_receiver` shows metrics with service labels (`service=vep_host_metrics@hostname`)
 
+## CAN Transport Options
+
+`vep_can_probe` supports two CAN transports:
+
+| Transport | Interface | Use Case |
+|-----------|-----------|----------|
+| `socketcan` | vcan0, can0 | Standard Linux CAN interfaces |
+| `avtp` | eth0, enp0s3 | IEEE 1722 AVTP over Ethernet |
+
+```bash
+# SocketCAN (default)
+./vep_can_probe --config mappings.yaml --interface vcan0 --dbc model3.dbc
+
+# AVTP over Ethernet (for targets without vcan)
+./vep_can_probe --config mappings.yaml --interface eth0 --dbc model3.dbc --transport avtp
+```
+
+### Permissions
+
+**AVTP Transport** - Requires raw Ethernet sockets:
+
+| Environment | Command |
+|-------------|---------|
+| Standalone (root) | `sudo ./vep_can_probe --transport avtp ...` |
+| Standalone (capability) | `sudo setcap cap_net_raw+ep ./vep_can_probe` |
+| Container | `docker run --cap-add NET_RAW --network host ...` |
+| Container (privileged) | `docker run --privileged --network host ...` |
+
+**SocketCAN** - Requires vcan kernel module on host:
+```bash
+sudo modprobe vcan
+sudo ip link add dev vcan0 type vcan
+sudo ip link set up vcan0
+```
+
+Containers need `--network host` to access host's vcan interfaces.
+
 ## Docker Builds (AutoSD/RHEL)
 
 For containerized deployments targeting CentOS Stream 9 / RHEL-based automotive OS:
