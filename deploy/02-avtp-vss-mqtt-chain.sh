@@ -246,8 +246,8 @@ podman run -d \
     $CONTAINER_PLATFORM \
     --network host \
     --cap-add NET_RAW \
-    -v "$DBC_FILE:$CONTAINER_DBC_FILE:ro" \
-    -v "$MAPPINGS_FILE:$CONTAINER_MAPPINGS_FILE:ro" \
+    -v "$DBC_FILE:$CONTAINER_DBC_FILE:ro,z" \
+    -v "$MAPPINGS_FILE:$CONTAINER_MAPPINGS_FILE:ro,z" \
     "$VEP_IMAGE" \
     vep_can_probe \
         --config "$CONTAINER_MAPPINGS_FILE" \

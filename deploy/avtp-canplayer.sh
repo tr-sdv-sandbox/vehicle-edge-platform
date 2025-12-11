@@ -123,7 +123,7 @@ podman run --rm \
     $CONTAINER_PLATFORM \
     --network host \
     --cap-add NET_RAW \
-    -v "$LOGFILE:$CONTAINER_LOGFILE:ro" \
+    -v "$LOGFILE:$CONTAINER_LOGFILE:ro,z" \
     "$VEP_IMAGE" \
     avtp_canplayer \
         -I "$CONTAINER_LOGFILE" \
