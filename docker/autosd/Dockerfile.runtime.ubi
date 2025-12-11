@@ -101,6 +101,9 @@ COPY --from=builder /workspace/build/vep-core/tools/vep_host_metrics/vep_host_me
 COPY --from=builder /workspace/build/libvssdag/tools/avtp_canplayer/avtp_canplayer /usr/local/bin/
 COPY --from=builder /workspace/build/libvssdag/tools/avtp_test_sender/avtp_test_sender /usr/local/bin/
 
+# Copy KUKSA utilities from libkuksa-cpp
+COPY --from=builder /workspace/build/libkuksa-cpp/utils/kuksa_logger /usr/local/bin/
+
 # Copy Open1722 libraries (required for AVTP tools)
 COPY --from=builder /usr/local/lib/libopen1722*.so* /usr/local/lib/
 
