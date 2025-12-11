@@ -61,6 +61,7 @@ RUN apt-get update && apt-get install -y \
     gdb \
     valgrind \
     clang-format \
+    tmux \
     && rm -rf /var/lib/apt/lists/*
 
 # Install concurrentqueue (header-only, not in Ubuntu repos)
