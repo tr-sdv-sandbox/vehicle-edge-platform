@@ -99,9 +99,11 @@ vep_can_probe supports two CAN transports:
 - `vep-core/probes/vep_avtp_probe/vep_avtp_probe` - IEEE 1722 AVTP → DDS
 - `vep-core/vep_exporter` - DDS → compressed MQTT
 - `vep-core/kuksa_dds_bridge` - KUKSA ↔ DDS bidirectional bridge
+- `vep-core/rt_dds_bridge` - DDS ↔ RT transport (loopback for testing)
 - `vep-core/vep_mqtt_receiver` - MQTT receiver/decoder for testing
+- `vep-core/tools/vep_host_metrics/vep_host_metrics` - Linux metrics → OTLP
 
-**Ports:** KUKSA Databroker (gRPC) 61234, Mosquitto (MQTT) 1883, DDS multicast RTPS
+**Ports:** KUKSA (gRPC) 61234, Mosquitto (MQTT) 1883, OTLP (gRPC) 4317, DDS multicast RTPS
 
 ## Configuration Files
 
@@ -168,6 +170,28 @@ cd docker/autosd
 ```
 
 See `docker/autosd/README.md` for detailed documentation.
+
+## Containerized Deployment (deploy/)
+
+Pipeline scripts for containerized testing on dev or target systems:
+
+```bash
+cd deploy
+
+# OTEL pipeline only (host-metrics → otel-probe → exporter → mqtt)
+./01-otel-mqtt-chain.sh
+
+# AVTP CAN pipeline (avtp-probe → exporter → mqtt)
+./02-avtp-vss-mqtt-chain.sh
+
+# Full pipeline with KUKSA integration
+./03-full-pipeline.sh
+
+# Utilities
+./avtp-canplayer.sh eth0 candump.log    # Replay CAN over AVTP
+./kuksa-logger.sh                        # Log KUKSA signals
+./setup_avtp_loopback.sh                 # Create veth pair for AVTP testing
+```
 
 ## IDL Message Types
 

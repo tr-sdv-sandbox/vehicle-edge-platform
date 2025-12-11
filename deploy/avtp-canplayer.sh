@@ -77,9 +77,6 @@ LOGFILE="$2"
 shift 2
 EXTRA_ARGS="$@"
 
-# Resolve to absolute path
-LOGFILE_ABS="$(cd "$(dirname "$LOGFILE")" && pwd)/$(basename "$LOGFILE")"
-
 # Container path for mounted log file
 CONTAINER_LOGFILE="/data/candump.log"
 
@@ -87,8 +84,10 @@ CONTAINER_LOGFILE="/data/candump.log"
 # Validation
 # =============================================================================
 
-if [ ! -f "$LOGFILE_ABS" ]; then
-    echo "Error: Log file not found: $LOGFILE_ABS"
+# Use path as-is (caller should use $(pwd)/file for absolute path)
+if [ ! -f "$LOGFILE" ]; then
+    echo "Error: Log file not found: $LOGFILE"
+    echo "Hint: Use absolute path, e.g.: sudo $0 $AVTP_INTERFACE \$(pwd)/candump.log"
     exit 1
 fi
 
@@ -103,7 +102,7 @@ echo "Configuration:"
 echo "  Mode:           $MODE_DESC"
 echo "  VEP Image:      $VEP_IMAGE"
 echo "  Interface:      $AVTP_INTERFACE"
-echo "  Log file:       $LOGFILE_ABS"
+echo "  Log file:       $LOGFILE"
 [ -n "$EXTRA_ARGS" ] && echo "  Options:        $EXTRA_ARGS"
 echo ""
 
@@ -124,7 +123,7 @@ podman run --rm \
     $CONTAINER_PLATFORM \
     --network host \
     --cap-add NET_RAW \
-    -v "$LOGFILE_ABS:$CONTAINER_LOGFILE:ro" \
+    -v "$LOGFILE:$CONTAINER_LOGFILE:ro" \
     "$VEP_IMAGE" \
     avtp_canplayer \
         -I "$CONTAINER_LOGFILE" \
