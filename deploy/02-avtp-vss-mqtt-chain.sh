@@ -1,8 +1,10 @@
 #!/bin/bash
-# 02-avtp-vss-mqtt-chain.sh - AVTP CAN -> VSS -> DDS -> MQTT chain
+# 02-avtp-vss-mqtt-chain.sh - Full VEP telemetry pipeline with AVTP CAN transport
 #
-# Tests the complete vehicle telemetry pipeline with IEEE 1722 AVTP transport:
-#   AVTP CAN frames -> vep_can_probe -> VSS -> DDS -> vep_exporter -> MQTT -> vep_mqtt_receiver
+# Runs the complete vehicle telemetry pipeline with IEEE 1722 AVTP transport:
+#   - AVTP CAN frames -> vep_can_probe -> VSS -> DDS
+#   - Host metrics -> vep_otel_probe -> DDS
+#   - DDS -> vep_exporter -> MQTT -> vep_mqtt_receiver
 #
 # IMPORTANT: This script requires root/sudo to create AF_PACKET raw sockets for AVTP.
 #   Rootless podman cannot grant CAP_NET_RAW to containers.
@@ -66,6 +68,10 @@ fi
 # MQTT settings
 MQTT_BROKER="localhost"
 MQTT_PORT="${MQTT_PORT:-1883}"
+
+# OTEL settings
+OTEL_GRPC_PORT="4317"
+HOST_METRICS_INTERVAL="5"                    # Seconds between metrics collection
 
 # Container paths for mounted config files
 CONTAINER_DBC_FILE="/etc/vep/can.dbc"
@@ -138,7 +144,7 @@ fi
 # -----------------------------------------------------------------------------
 # Step 1: Start MQTT Broker
 # -----------------------------------------------------------------------------
-echo "[1/4] Starting MQTT broker..."
+echo "[1/6] Starting MQTT broker..."
 
 MQTT_CONTAINER="${CONTAINER_PREFIX}-mqtt"
 CONTAINERS+=("$MQTT_CONTAINER")
@@ -164,7 +170,7 @@ echo ""
 # -----------------------------------------------------------------------------
 # Step 2: Start VEP Exporter (DDS -> MQTT)
 # -----------------------------------------------------------------------------
-echo "[2/4] Starting vep_exporter (DDS -> MQTT)..."
+echo "[2/6] Starting vep_exporter (DDS -> MQTT)..."
 
 EXPORTER_CONTAINER="${CONTAINER_PREFIX}-exporter"
 CONTAINERS+=("$EXPORTER_CONTAINER")
@@ -182,9 +188,54 @@ echo "  vep_exporter started"
 echo ""
 
 # -----------------------------------------------------------------------------
-# Step 3: Start VEP CAN Probe with AVTP transport (AVTP -> VSS -> DDS)
+# Step 3: Start VEP OTEL Probe (OTLP gRPC -> DDS)
 # -----------------------------------------------------------------------------
-echo "[3/4] Starting vep_can_probe (AVTP -> VSS -> DDS)..."
+echo "[3/6] Starting vep_otel_probe (OTLP gRPC -> DDS)..."
+
+OTEL_PROBE_CONTAINER="${CONTAINER_PREFIX}-otel-probe"
+CONTAINERS+=("$OTEL_PROBE_CONTAINER")
+
+podman run -d \
+    --name "$OTEL_PROBE_CONTAINER" \
+    $CONTAINER_PLATFORM \
+    --network host \
+    "$VEP_IMAGE" \
+    vep_otel_probe \
+        --port $OTEL_GRPC_PORT
+
+echo "  vep_otel_probe listening on port $OTEL_GRPC_PORT"
+sleep 1  # Give it time to start listening
+echo ""
+
+# -----------------------------------------------------------------------------
+# Step 4: Start VEP Host Metrics (Linux metrics -> OTLP)
+# -----------------------------------------------------------------------------
+echo "[4/6] Starting vep_host_metrics (Linux metrics -> OTLP)..."
+
+HOST_METRICS_CONTAINER="${CONTAINER_PREFIX}-host-metrics"
+CONTAINERS+=("$HOST_METRICS_CONTAINER")
+
+# Mount /proc and /sys read-only for host metrics collection
+podman run -d \
+    --name "$HOST_METRICS_CONTAINER" \
+    $CONTAINER_PLATFORM \
+    --network host \
+    -v /proc:/host/proc:ro \
+    -v /sys:/host/sys:ro \
+    -e HOST_PROC=/host/proc \
+    -e HOST_SYS=/host/sys \
+    "$VEP_IMAGE" \
+    vep_host_metrics \
+        --endpoint localhost:$OTEL_GRPC_PORT \
+        --interval $HOST_METRICS_INTERVAL
+
+echo "  vep_host_metrics collecting every ${HOST_METRICS_INTERVAL}s"
+echo ""
+
+# -----------------------------------------------------------------------------
+# Step 5: Start VEP CAN Probe with AVTP transport (AVTP -> VSS -> DDS)
+# -----------------------------------------------------------------------------
+echo "[5/6] Starting vep_can_probe (AVTP -> VSS -> DDS)..."
 
 CAN_PROBE_CONTAINER="${CONTAINER_PREFIX}-can-probe"
 CONTAINERS+=("$CAN_PROBE_CONTAINER")
@@ -209,9 +260,9 @@ sleep 1
 echo ""
 
 # -----------------------------------------------------------------------------
-# Step 4: Start VEP MQTT Receiver (display MQTT messages)
+# Step 6: Start VEP MQTT Receiver (display MQTT messages)
 # -----------------------------------------------------------------------------
-echo "[4/4] Starting vep_mqtt_receiver (MQTT -> display)..."
+echo "[6/6] Starting vep_mqtt_receiver (MQTT -> display)..."
 echo ""
 
 RECEIVER_CONTAINER="${CONTAINER_PREFIX}-receiver"
@@ -222,15 +273,17 @@ echo "Pipeline running!"
 echo "============================================================"
 echo ""
 echo "Services:"
-echo "  - MQTT broker:    $MQTT_BROKER:$MQTT_PORT"
-echo "  - vep_exporter:   DDS -> MQTT"
-echo "  - vep_can_probe:  AVTP ($AVTP_INTERFACE) -> VSS -> DDS"
+echo "  - MQTT broker:       $MQTT_BROKER:$MQTT_PORT"
+echo "  - vep_exporter:      DDS -> MQTT"
+echo "  - vep_otel_probe:    OTLP gRPC :$OTEL_GRPC_PORT -> DDS"
+echo "  - vep_host_metrics:  Linux metrics -> OTLP (every ${HOST_METRICS_INTERVAL}s)"
+echo "  - vep_can_probe:     AVTP ($AVTP_INTERFACE) -> VSS -> DDS"
 echo "  - vep_mqtt_receiver: MQTT -> display"
 echo ""
 echo "To send CAN data over AVTP (in another terminal):"
-echo "  ./avtp-canplayer.sh avtp0 /path/to/candump.log"
+echo "  sudo ./avtp-canplayer.sh avtp0 /path/to/candump.log"
 echo ""
-echo "VSS signals should appear below when CAN data is received."
+echo "Signals should appear below (host metrics every ${HOST_METRICS_INTERVAL}s, VSS when CAN data received)."
 echo "Press Ctrl+C to stop all services."
 echo "============================================================"
 echo ""
