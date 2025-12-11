@@ -242,7 +242,7 @@ if [ -f "$VSS_FILE" ]; then
         --name "$KUKSA_CONTAINER" \
         $CONTAINER_PLATFORM \
         --network host \
-        -v "$VSS_FILE:$CONTAINER_VSS_FILE:ro" \
+        -v "$VSS_FILE:$CONTAINER_VSS_FILE:ro,z" \
         "$KUKSA_IMAGE" \
         --address 0.0.0.0 \
         --port $KUKSA_PORT \
@@ -390,8 +390,8 @@ podman run -d \
     $CONTAINER_PLATFORM \
     --network host \
     --cap-add NET_RAW \
-    -v "$DBC_FILE:$CONTAINER_DBC_FILE:ro" \
-    -v "$MAPPINGS_FILE:$CONTAINER_MAPPINGS_FILE:ro" \
+    -v "$DBC_FILE:$CONTAINER_DBC_FILE:ro,z" \
+    -v "$MAPPINGS_FILE:$CONTAINER_MAPPINGS_FILE:ro,z" \
     "$VEP_IMAGE" \
     vep_can_probe \
         --config "$CONTAINER_MAPPINGS_FILE" \
