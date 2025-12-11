@@ -4,13 +4,23 @@
 # This creates two virtual Ethernet interfaces connected to each other:
 #   avtp0 <---> avtp1
 #
+# This simulates the target deployment where:
+#   - QNX host sends AVTP frames to a virtual NIC
+#   - RHEL VM receives on its vNIC
+#   - Container (--network host) sees the VM's vNIC
+#
+#   avtp0 (simulates QNX)  <--->  avtp1 (simulates VM's vNIC)
+#         │                              │
+#         ▼                              ▼
+#   avtp_canplayer                vep_can_probe (container)
+#
 # Usage:
 #   ./setup_avtp_loopback.sh         # Create veth pair
 #   ./setup_avtp_loopback.sh --down  # Remove veth pair
 #
 # Then use:
-#   Terminal 1: ./run_framework_avtp.sh avtp1    # Receiver
-#   Terminal 2: ./run_avtp_canplayer.sh avtp0    # Sender
+#   Terminal 1: ./deploy/02-avtp-vss-mqtt-chain.sh avtp1    # Receiver
+#   Terminal 2: ./deploy/avtp-canplayer.sh avtp0 config/candump.log  # Sender
 
 VETH_TX="avtp0"
 VETH_RX="avtp1"

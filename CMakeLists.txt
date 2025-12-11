@@ -54,6 +54,7 @@ if(EXISTS ${COMPONENTS_DIR}/libvssdag/CMakeLists.txt)
     message(STATUS "Adding libvssdag")
     set(BUILD_TESTS ${VEP_BUILD_TESTS} CACHE BOOL "" FORCE)
     set(BUILD_EXAMPLES ${VEP_BUILD_EXAMPLES} CACHE BOOL "" FORCE)
+    set(BUILD_TOOLS ON CACHE BOOL "" FORCE)  # Always build AVTP tools
     add_subdirectory(${COMPONENTS_DIR}/libvssdag ${CMAKE_BINARY_DIR}/libvssdag)
 else()
     message(FATAL_ERROR "libvssdag not found. Run ./setup.sh first.")

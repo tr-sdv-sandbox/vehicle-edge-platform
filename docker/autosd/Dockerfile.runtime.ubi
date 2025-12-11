@@ -97,6 +97,13 @@ COPY --from=builder /workspace/build/vep-core/probes/vep_can_probe/vep_can_probe
 COPY --from=builder /workspace/build/vep-core/probes/vep_otel_probe/vep_otel_probe /usr/local/bin/
 COPY --from=builder /workspace/build/vep-core/tools/vep_host_metrics/vep_host_metrics /usr/local/bin/
 
+# Copy AVTP tools from libvssdag
+COPY --from=builder /workspace/build/libvssdag/tools/avtp_canplayer/avtp_canplayer /usr/local/bin/
+COPY --from=builder /workspace/build/libvssdag/tools/avtp_test_sender/avtp_test_sender /usr/local/bin/
+
+# Copy Open1722 libraries (required for AVTP tools)
+COPY --from=builder /usr/local/lib/libopen1722*.so* /usr/local/lib/
+
 # Copy configuration files
 COPY --from=builder /workspace/config /etc/vep/config
 
