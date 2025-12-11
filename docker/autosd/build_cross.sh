@@ -77,23 +77,29 @@ echo ""
 
 # Step 1: Check/setup QEMU
 echo "=== Step 1: Checking QEMU setup ==="
+
+# First, ensure QEMU emulators are registered (needed for cross-platform builds)
+echo "Ensuring QEMU emulators are registered..."
+docker run --rm --privileged tonistiigi/binfmt --install all > /dev/null 2>&1 || true
+
+# Verify Docker works
 if ! docker run --rm alpine:latest uname -m > /dev/null 2>&1; then
-    echo "Docker not working, please check Docker installation"
+    echo "ERROR: Docker not working. Trying with verbose output:"
+    docker run --rm alpine:latest uname -m
     exit 1
 fi
 
-# Test if QEMU is registered for target arch
-TEST_IMAGE="arm64v8/alpine:latest"
-if [[ "$PLATFORM" == "linux/arm/v7" ]]; then
-    TEST_IMAGE="arm32v7/alpine:latest"
-fi
-
-if ! docker run --rm --platform "$PLATFORM" alpine:latest uname -m > /dev/null 2>&1; then
-    echo "QEMU not registered for $PLATFORM. Setting up..."
-    docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
-    echo "QEMU registered."
+# Verify QEMU works for target platform
+echo -n "Verifying $PLATFORM emulation... "
+if docker run --rm --platform "$PLATFORM" alpine:latest uname -m > /dev/null 2>&1; then
+    echo "OK"
 else
-    echo "QEMU already configured for $PLATFORM"
+    echo "FAILED"
+    echo ""
+    echo "ERROR: Cannot run $PLATFORM containers."
+    echo "Please run manually and retry:"
+    echo "  sudo docker run --rm --privileged tonistiigi/binfmt --install all"
+    exit 1
 fi
 echo ""
 
