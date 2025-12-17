@@ -105,6 +105,23 @@ RUN cd /tmp && \
     ldconfig && \
     rm -rf /tmp/Open1722
 
+# Install vsomeip3 (SOME/IP implementation) with routing manager daemon
+ARG VSOMEIP_VERSION=3.5.11
+RUN cd /tmp && \
+    git clone --depth 1 --branch ${VSOMEIP_VERSION} https://github.com/COVESA/vsomeip.git && \
+    cd vsomeip && \
+    mkdir -p build && cd build && \
+    cmake -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_INSTALL_PREFIX=/usr/local \
+          -DENABLE_SIGNAL_HANDLING=1 \
+          -DVSOMEIP_INSTALL_ROUTINGMANAGERD=ON \
+          .. && \
+    make -j$(nproc) && \
+    make install && \
+    strip --strip-unneeded /usr/local/bin/routingmanagerd 2>/dev/null || true && \
+    ldconfig && \
+    rm -rf /tmp/vsomeip
+
 # Create non-root user (handle existing GID/UID)
 ARG USERNAME=vscode
 ARG USER_UID=1000

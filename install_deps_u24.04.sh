@@ -44,6 +44,11 @@ $SUDO apt-get install -y \
     libmosquitto-dev \
     libzstd-dev \
     \
+    libboost-system-dev \
+    libboost-thread-dev \
+    libboost-filesystem-dev \
+    libboost-log-dev \
+    \
     cyclonedds-dev \
     cyclonedds-tools \
     \
@@ -134,6 +139,33 @@ fi
 echo ""
 
 # ==============================================================================
+# vsomeip3 (SOME/IP implementation)
+# ==============================================================================
+echo "=== Installing vsomeip3 ==="
+
+if pkg-config --exists vsomeip3 2>/dev/null; then
+    echo "vsomeip3 already installed, skipping"
+else
+    cd /tmp
+    rm -rf vsomeip
+    git clone --depth 1 --branch 3.5.11 https://github.com/COVESA/vsomeip.git
+    cd vsomeip
+    mkdir -p build && cd build
+    cmake -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_INSTALL_PREFIX=/usr/local \
+          -DENABLE_SIGNAL_HANDLING=1 \
+          -DVSOMEIP_INSTALL_ROUTINGMANAGERD=ON \
+          ..
+    make -j$(nproc)
+    $SUDO make install
+    $SUDO strip --strip-unneeded /usr/local/bin/routingmanagerd 2>/dev/null || true
+    $SUDO ldconfig
+    echo "vsomeip3 + routingmanagerd installed"
+fi
+
+echo ""
+
+# ==============================================================================
 # Summary
 # ==============================================================================
 echo "=== Installation Complete ==="
@@ -152,6 +184,7 @@ echo "  - Python3 + gRPC/Flask (for IFEX)"
 echo "  - concurrentqueue"
 echo "  - dbcppp"
 echo "  - Open1722 (IEEE 1722 AVTP)"
+echo "  - vsomeip3 (SOME/IP implementation)"
 echo ""
 echo "Note: Mosquitto broker runs via Docker (eclipse-mosquitto:2)"
 echo "      KUKSA databroker runs via Docker (ghcr.io/eclipse-kuksa/kuksa-databroker:0.6.0)"

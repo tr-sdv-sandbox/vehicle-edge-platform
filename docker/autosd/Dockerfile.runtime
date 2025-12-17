@@ -89,6 +89,8 @@ RUN mkdir -p /usr/local/lib64 /usr/local/lib && \
     mv /tmp/lib/libutf8_range*.so* /usr/local/lib/ && \
     mv /tmp/lib/libdbcppp.so* /usr/local/lib/ && \
     mv /tmp/lib/libxmlmm.so* /usr/local/lib/ 2>/dev/null || true && \
+    # vsomeip3 libraries
+    mv /tmp/lib/libvsomeip3*.so* /usr/local/lib/ 2>/dev/null || true && \
     # Cleanup temp directories
     rm -rf /tmp/lib64 /tmp/lib
 

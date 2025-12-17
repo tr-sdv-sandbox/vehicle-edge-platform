@@ -210,7 +210,28 @@ RUN cd /tmp && \
     rm -rf /tmp/Open1722
 
 # =============================================================================
-# STAGE 7: CycloneDDS (BUILD FROM SOURCE)
+# STAGE 7: vsomeip3 (SOME/IP implementation)
+# =============================================================================
+
+ARG VSOMEIP_VERSION=3.5.11
+RUN cd /tmp && \
+    git clone --depth 1 --branch ${VSOMEIP_VERSION} https://github.com/COVESA/vsomeip.git && \
+    cd vsomeip && \
+    mkdir build && cd build && \
+    cmake -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_INSTALL_PREFIX=/usr/local \
+          -DENABLE_SIGNAL_HANDLING=1 \
+          -DVSOMEIP_INSTALL_ROUTINGMANAGERD=ON \
+          .. && \
+    make -j$(nproc) && \
+    make install && \
+    strip --strip-unneeded /usr/local/lib/libvsomeip3*.so* && \
+    strip --strip-unneeded /usr/local/bin/routingmanagerd 2>/dev/null || true && \
+    ldconfig && \
+    rm -rf /tmp/vsomeip
+
+# =============================================================================
+# STAGE 8: CycloneDDS (BUILD FROM SOURCE)
 # Ubuntu: cyclonedds-dev, cyclonedds-tools
 # =============================================================================
 
@@ -230,7 +251,7 @@ RUN cd /tmp && \
     rm -rf /tmp/cyclonedds
 
 # =============================================================================
-# STAGE 8: Vehicle Edge Platform specific dependencies
+# STAGE 9: Vehicle Edge Platform specific dependencies
 # =============================================================================
 
 # concurrentqueue - lock-free queue for libvssdag (header-only library)
@@ -257,7 +278,7 @@ RUN cd /tmp && \
     rm -rf /tmp/dbcppp
 
 # =============================================================================
-# STAGE 9: nlohmann-json (if not available via dnf)
+# STAGE 10: nlohmann-json (if not available via dnf)
 # =============================================================================
 
 # Check if json-devel provides nlohmann, if not build from source
