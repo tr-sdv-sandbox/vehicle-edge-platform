@@ -79,33 +79,51 @@ Build all components:
 
 Start the framework (all services):
 ```bash
-./run_framework.sh
+./scripts/run_framework.sh
 ```
 
 In another terminal, replay CAN data:
 ```bash
-./run_canplayer.sh
+./scripts/run_canplayer.sh
 ```
 
 View cloud backend output:
 ```bash
-./run_aws_ingestion.sh
+./scripts/run_aws_ingestion.sh
 ```
 
 ## Scripts
+
+**Root scripts** (build/setup):
 
 | Script | Description |
 |--------|-------------|
 | `setup.sh` | Clone all component repositories |
 | `sync-all.sh` | Pull latest changes from all repos |
 | `build-all.sh` | Build all components |
-| `run_framework.sh` | Start all framework services (SocketCAN) |
-| `run_framework_avtp.sh` | Start all framework services (IEEE 1722 AVTP) |
-| `run_canplayer.sh` | Replay CAN data to vcan0 (SocketCAN) |
-| `run_avtp_canplayer.sh` | Replay CAN data over IEEE 1722 AVTP |
-| `run_aws_ingestion.sh` | Run MQTT receiver for testing |
-| `run_kuksa_logger.sh` | Log KUKSA databroker values |
-| `validate_mappings.sh` | Validate VSS signal mappings |
+
+**Runtime scripts** (in `scripts/`, run native binaries):
+
+| Script | Description |
+|--------|-------------|
+| `scripts/run_framework.sh` | Start all framework services (SocketCAN) |
+| `scripts/run_framework_avtp.sh` | Start all framework services (IEEE 1722 AVTP) |
+| `scripts/run_canplayer.sh` | Replay CAN data to vcan0 (SocketCAN) |
+| `scripts/run_avtp_canplayer.sh` | Replay CAN data over IEEE 1722 AVTP |
+| `scripts/run_aws_ingestion.sh` | Run MQTT receiver for testing |
+| `scripts/run_kuksa_logger.sh` | Log KUKSA databroker values |
+| `scripts/validate_mappings.sh` | Validate VSS signal mappings |
+| `scripts/setup_avtp_loopback.sh` | Create veth pair for AVTP testing |
+
+**Containerized scripts** (in `deploy/`, run via podman/docker):
+
+| Script | Description |
+|--------|-------------|
+| `deploy/01-otel-mqtt-chain.sh` | OTEL telemetry pipeline |
+| `deploy/02-avtp-vss-mqtt-chain.sh` | AVTP CAN pipeline |
+| `deploy/03-full-pipeline.sh` | Full pipeline with KUKSA |
+| `deploy/avtp-canplayer.sh` | Replay CAN over AVTP (containerized) |
+| `deploy/kuksa-logger.sh` | Log KUKSA signals (containerized) |
 
 ## Directory Structure
 
@@ -123,12 +141,13 @@ vehicle-edge-platform/
 │   ├── Model3CAN.dbc     # CAN database (signal definitions)
 │   ├── model3_mappings_dag.yaml  # CAN-to-VSS mappings
 │   └── vss-5.1-kuksa.json        # VSS specification
+├── scripts/              # Runtime scripts (native binaries)
+├── deploy/               # Containerized deployment scripts
 ├── docker/               # Container builds
 │   └── autosd/           # AutoSD/RHEL builds (CentOS, UBI, ARM64)
 ├── build/                # Build output (created by build-all.sh)
 ├── build-autosd/         # Docker build output
-├── CMakeLists.txt        # Top-level CMake
-└── *.sh                  # Utility scripts
+└── CMakeLists.txt        # Top-level CMake
 ```
 
 ## Key Binaries

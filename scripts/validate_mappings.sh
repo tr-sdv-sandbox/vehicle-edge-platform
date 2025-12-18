@@ -9,13 +9,14 @@
 #   --json           Output results as JSON
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BUILD_DIR="$SCRIPT_DIR/build"
-CONFIG_DIR="$SCRIPT_DIR/config"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+BUILD_DIR="$ROOT_DIR/build"
+CONFIG_DIR="$ROOT_DIR/config"
 
 YAML_FILE="$CONFIG_DIR/model3_mappings_dag.yaml"
 VSS_FILE="$CONFIG_DIR/vss-5.1-kuksa.json"
 
-VALIDATOR="$SCRIPT_DIR/components/libvssdag/tools/validate_mappings/vssdag_validate_mappings.py"
+VALIDATOR="$ROOT_DIR/components/libvssdag/tools/validate_mappings/vssdag_validate_mappings.py"
 
 if [ ! -f "$VALIDATOR" ]; then
     echo "Error: vssdag_validate_mappings.py not found at $VALIDATOR"

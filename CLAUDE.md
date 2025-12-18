@@ -14,13 +14,22 @@ Vehicle Edge Platform is a modular edge computing platform for vehicle data acqu
 ./setup.sh                    # Clone component repositories
 
 # Build all components
-./build-all.sh [Release|Debug] [parallel_jobs]
+./build-all.sh [Release|Debug] [parallel_jobs] [--strip]
 
-# Run tests
+# Run all tests
 cd build && ctest --output-on-failure
 
 # Run single component tests
 cd build/<component> && ctest --output-on-failure
+
+# Run specific test by name pattern
+cd build && ctest -R "state_machine" --output-on-failure
+
+# Run single Google Test case
+./build/libkuksa-cpp/tests/state_machine_tests --gtest_filter="StateMachineTest.BasicTransition"
+
+# Sync all component repos (pull latest)
+./sync-all.sh
 ```
 
 ## Virtual CAN Setup
@@ -66,13 +75,17 @@ vep_can_probe supports two CAN transports:
 
 ## Running the Framework
 
+**Native scripts** (in `scripts/`) run binaries from `build/`:
+
 ```bash
-./run_framework.sh            # Start all services (KUKSA, probes, bridges, exporter)
-./run_canplayer.sh            # Replay CAN data to vcan0 (SocketCAN)
-./run_avtp_canplayer.sh       # Replay CAN data over IEEE 1722 AVTP
-./run_aws_ingestion.sh        # View MQTT receiver output
-./run_kuksa_logger.sh         # Log KUKSA databroker values
-./validate_mappings.sh        # Validate VSS signal mappings against spec
+./scripts/run_framework.sh         # Start all services (KUKSA, probes, bridges, exporter) - SocketCAN
+./scripts/run_framework_avtp.sh    # Start all services using IEEE 1722 AVTP transport
+./scripts/run_canplayer.sh         # Replay CAN data to vcan0 (SocketCAN)
+./scripts/run_avtp_canplayer.sh    # Replay CAN data over IEEE 1722 AVTP
+./scripts/run_aws_ingestion.sh     # View MQTT receiver output
+./scripts/run_kuksa_logger.sh      # Log KUKSA databroker values
+./scripts/validate_mappings.sh     # Validate VSS signal mappings against spec
+./scripts/setup_avtp_loopback.sh   # Creates avtp0/avtp1 veth pair for AVTP testing
 ```
 
 ## Architecture
@@ -102,6 +115,8 @@ vep_can_probe supports two CAN transports:
 - `vep-core/rt_dds_bridge` - DDS ↔ RT transport (loopback for testing)
 - `vep-core/vep_mqtt_receiver` - MQTT receiver/decoder for testing
 - `vep-core/tools/vep_host_metrics/vep_host_metrics` - Linux metrics → OTLP
+- `libvssdag/tools/avtp_canplayer/avtp_canplayer` - Replay candump over AVTP
+- `libvssdag/tools/avtp_test_sender/avtp_test_sender` - Send test AVTP CAN frames
 
 **Ports:** KUKSA (gRPC) 61234, Mosquitto (MQTT) 1883, OTLP (gRPC) 4317, DDS multicast RTPS
 
@@ -130,6 +145,23 @@ vep_can_probe supports two CAN transports:
 - Client async callbacks: run on gRPC threads - keep fast (<1ms), queue heavy work
 - Never call `publish()` from within subscription/actuator callbacks (gRPC deadlock)
 
+## Debugging
+
+```bash
+# Verbose logging (glog)
+GLOG_logtostderr=1 GLOG_v=1 ./vep_can_probe ...
+
+# DDS debugging - see all DDS traffic
+export CYCLONEDDS_URI='<CycloneDDS><Domain><Tracing><Verbosity>finest</Verbosity></Tracing></Domain></CycloneDDS>'
+
+# Monitor DDS topics (requires cyclonedds-tools)
+ddsperf pub topic rt/vss/signals   # Publish test
+ddsperf sub topic rt/vss/signals   # Subscribe test
+
+# AVTP packet capture
+sudo tcpdump -i eth0 -w avtp.pcap 'ether proto 0x22f0'
+```
+
 ## Component Documentation
 
 Each component in `components/` has its own `CLAUDE.md` with component-specific guidance, plus `README.md` for detailed API documentation. Key files:
@@ -138,6 +170,8 @@ Each component in `components/` has its own `CLAUDE.md` with component-specific 
 - `components/vep-core/ARCHITECTURE.md` - System architecture and data flows
 - `components/vep-dds/CLAUDE.md` - DDS wrapper patterns, IDL topic naming, vep_dds_common library
 - `components/vep-schema/README.md` - Message types, topic naming, QoS recommendations
+
+**When working on a specific component**, read its `CLAUDE.md` first for component-specific build commands, architecture, and code conventions.
 
 ## CMake Options
 
@@ -173,7 +207,7 @@ See `docker/autosd/README.md` for detailed documentation.
 
 ## Containerized Deployment (deploy/)
 
-Pipeline scripts for containerized testing on dev or target systems:
+**Containerized scripts** (in `deploy/`) run via podman/docker, deployable to targets without build environment:
 
 ```bash
 cd deploy
@@ -188,9 +222,12 @@ cd deploy
 ./03-full-pipeline.sh
 
 # Utilities
-./avtp-canplayer.sh eth0 candump.log    # Replay CAN over AVTP
-./kuksa-logger.sh                        # Log KUKSA signals
+./avtp-canplayer.sh eth0 candump.log    # Replay CAN over AVTP (containerized)
+./kuksa-logger.sh                        # Log KUKSA signals (containerized)
 ./setup_avtp_loopback.sh                 # Create veth pair for AVTP testing
+
+# ARM64 target deployment
+TARGET=1 ./01-otel-mqtt-chain.sh         # Uses ARM64 container image
 ```
 
 ## IDL Message Types

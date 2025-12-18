@@ -13,8 +13,9 @@
 # Press Ctrl+C to stop all services.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BUILD_DIR="$SCRIPT_DIR/build"
-CONFIG_DIR="$SCRIPT_DIR/config"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+BUILD_DIR="$ROOT_DIR/build"
+CONFIG_DIR="$ROOT_DIR/config"
 
 # PIDs of background processes
 PIDS=()
@@ -310,7 +311,7 @@ if [ -f "$VEP_HOST_METRICS" ] && [ -f "$VEP_OTEL_PROBE" ]; then
 fi
 echo ""
 echo "To replay CAN data:"
-echo "  ./run_canplayer.sh"
+echo "  ./scripts/run_canplayer.sh"
 echo ""
 echo "To view MQTT messages:"
 echo "  $VEP_MQTT_RECEIVER"

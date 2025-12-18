@@ -11,7 +11,8 @@
 # The receiver connects to Mosquitto broker on localhost:1883
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BUILD_DIR="$SCRIPT_DIR/build"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+BUILD_DIR="$ROOT_DIR/build"
 
 # Parse arguments
 VERBOSE=""
@@ -44,7 +45,7 @@ if nc -z localhost 1883 2>/dev/null; then
     echo "Mosquitto broker running on localhost:1883"
 else
     echo "Warning: Mosquitto broker not running."
-    echo "  Start the framework first: ./run_framework.sh"
+    echo "  Start the framework first: ./scripts/run_framework.sh"
 fi
 
 echo ""

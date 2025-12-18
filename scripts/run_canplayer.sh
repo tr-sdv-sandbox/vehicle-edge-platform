@@ -3,6 +3,7 @@
 # The log was captured from 'elmcan' interface, we map it to vcan0
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-CONFIG_DIR="$SCRIPT_DIR/config"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+CONFIG_DIR="$ROOT_DIR/config"
 
 canplayer -I "$CONFIG_DIR/candump.log" vcan0=elmcan

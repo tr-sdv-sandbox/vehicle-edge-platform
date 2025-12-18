@@ -11,8 +11,9 @@
 #   ./run_avtp_canplayer.sh eth0 mylog.log     # Use specific interface and log
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BUILD_DIR="$SCRIPT_DIR/build"
-CONFIG_DIR="$SCRIPT_DIR/config"
+ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+BUILD_DIR="$ROOT_DIR/build"
+CONFIG_DIR="$ROOT_DIR/config"
 
 # Default interface and log file
 INTERFACE="${1:-eth0}"
