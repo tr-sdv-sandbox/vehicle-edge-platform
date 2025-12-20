@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Vehicle Edge Platform is a modular edge computing platform for vehicle data acquisition, transformation, and cloud ingestion. It uses CycloneDDS as the central message bus with specialized probes (CAN, OTEL, AVTP), bridges (KUKSA, RT transport), and exporters (MQTT with zstd compression).
 
+**Key Dependencies:** CycloneDDS, gRPC/Protobuf, Lua 5.4, Open1722 (IEEE 1722 AVTP), vsomeip3 (SOME/IP), libmosquitto, zstd
+
 ## Build Commands
 
 ```bash
@@ -39,6 +41,14 @@ Required for testing CAN-based probes:
 sudo modprobe vcan
 sudo ip link add dev vcan0 type vcan
 sudo ip link set up vcan0
+```
+
+## AVTP Loopback Setup
+
+For AVTP testing without physical network, create a virtual Ethernet pair:
+```bash
+./scripts/setup_avtp_loopback.sh   # Creates avtp0/avtp1 veth pair
+# Use avtp0 for sender, avtp1 for receiver (or vice versa)
 ```
 
 ## CAN Transport Options
@@ -113,7 +123,7 @@ vep_can_probe supports two CAN transports:
 - `vep-core/vep_exporter` - DDS → compressed MQTT
 - `vep-core/kuksa_dds_bridge` - KUKSA ↔ DDS bidirectional bridge
 - `vep-core/rt_dds_bridge` - DDS ↔ RT transport (loopback for testing)
-- `vep-core/vep_mqtt_receiver` - MQTT receiver/decoder for testing
+- `vep-core/vep_mqtt_logger` - MQTT logger/decoder for testing
 - `vep-core/tools/vep_host_metrics/vep_host_metrics` - Linux metrics → OTLP
 - `libvssdag/tools/avtp_canplayer/avtp_canplayer` - Replay candump over AVTP
 - `libvssdag/tools/avtp_test_sender/avtp_test_sender` - Send test AVTP CAN frames
@@ -182,6 +192,38 @@ Each component in `components/` has its own `CLAUDE.md` with component-specific 
 -DCMAKE_BUILD_TYPE=Release    # Release or Debug
 ```
 
+## Integration Tests
+
+Some integration tests auto-start Docker containers:
+- `KuksaTestFixture` - Starts KUKSA databroker (libkuksa-cpp tests)
+- `MqttTestFixture` - Starts Mosquitto broker (vep-core backend_transport tests)
+
+To use external brokers instead of Docker:
+```bash
+export KUKSA_ADDRESS=host:port   # Skip KUKSA Docker container
+export MQTT_HOST=host:port       # Skip Mosquitto Docker container
+```
+
+## Extending the Platform
+
+**Adding a new probe:**
+1. Create directory under `components/vep-core/probes/`
+2. Add `main.cpp` with gflags CLI parsing
+3. Use vep_dds_common for DDS publishing
+4. Add to `probes/CMakeLists.txt`
+
+**Adding a new DDS message type:**
+1. Define in `components/vep-schema/ifex/`
+2. Regenerate: `cd components/vep-schema && ./generate-all.sh`
+3. Add encoder in `vep-core/bridges/exporter_common/src/wire_encoder.cpp`
+4. Add decoder in `vep-core/bridges/exporter_common/src/wire_decoder.cpp`
+5. Add to subscriber in `vep-core/bridges/exporter_common/src/subscriber.cpp`
+
+**Modifying wire protocol:**
+1. Edit `components/vep-core/proto/transfer.proto`
+2. Rebuild (CMake regenerates automatically)
+3. Update wire_encoder.cpp and wire_decoder.cpp
+
 ## Docker Builds (AutoSD/RHEL)
 
 Container builds for CentOS Stream 9 / RHEL-based automotive OS (AutoSD):
@@ -221,6 +263,9 @@ cd deploy
 # Full pipeline with KUKSA integration
 ./03-full-pipeline.sh
 
+# Auto-architecture pipeline (recommended for production)
+sudo ./04-auto-pipeline.sh avtp1         # Auto-detects x86_64/ARM64, uses config_tesla/
+
 # Utilities
 ./avtp-canplayer.sh eth0 candump.log    # Replay CAN over AVTP (containerized)
 ./kuksa-logger.sh                        # Log KUKSA signals (containerized)
@@ -229,6 +274,13 @@ cd deploy
 # ARM64 target deployment
 TARGET=1 ./01-otel-mqtt-chain.sh         # Uses ARM64 container image
 ```
+
+**04-auto-pipeline.sh** features:
+- Auto-detects architecture (x86_64, ARM64, Darwin)
+- Dev machines sync VEP from docker, pull public images
+- Targets (Linux ARM64) use `--pull=never` for airgapped operation
+- Uses Tesla config from `deploy/config_tesla/` by default
+- Configurable via env vars: `CONFIG_DIR`, `DBC_FILE`, `MAPPINGS_FILE`, `KUKSA_PORT`, etc.
 
 ## IDL Message Types
 
@@ -242,3 +294,12 @@ DDS message definitions are generated from IFEX schemas in `components/vep-schem
 All messages include a common `vep::Header` with `source_id`, `timestamp_ns`, `seq_num`, `correlation_id`.
 
 To regenerate IDL from IFEX: `cd components/vep-schema && ./generate-all.sh`
+
+## Wire Protocol
+
+The exporter uses a bandwidth-optimized protobuf format (`transfer.proto`):
+- Delta timestamps (base timestamp + per-signal deltas in microseconds)
+- Batched signals (multiple signals per message)
+- Zstd compression (60-80% bandwidth reduction)
+
+See `components/vep-core/proto/transfer.proto` for message definitions.

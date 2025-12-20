@@ -88,7 +88,7 @@ fi
 VEP_EXPORTER="$BUILD_DIR/vep-core/vep_exporter"
 KUKSA_DDS_BRIDGE="$BUILD_DIR/vep-core/kuksa_dds_bridge"
 RT_DDS_BRIDGE="$BUILD_DIR/vep-core/rt_dds_bridge"
-VEP_MQTT_RECEIVER="$BUILD_DIR/vep-core/vep_mqtt_receiver"
+VEP_MQTT_LOGGER="$BUILD_DIR/vep-core/vep_mqtt_logger"
 
 # Probes from vep-core/probes
 VEP_CAN_PROBE="$BUILD_DIR/vep-core/probes/vep_can_probe/vep_can_probe"
@@ -314,7 +314,7 @@ echo "To replay CAN data:"
 echo "  ./scripts/run_canplayer.sh"
 echo ""
 echo "To view MQTT messages:"
-echo "  $VEP_MQTT_RECEIVER"
+echo "  $VEP_MQTT_LOGGER"
 echo ""
 echo "Press Ctrl+C to stop all services."
 echo ""

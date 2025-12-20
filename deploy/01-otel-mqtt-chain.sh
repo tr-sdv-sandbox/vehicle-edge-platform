@@ -2,7 +2,7 @@
 # 01-otel-mqtt-chain.sh - OTEL metrics -> DDS -> MQTT chain
 #
 # Tests the complete telemetry pipeline:
-#   vep_host_metrics -> OTLP gRPC -> vep_otel_probe -> DDS -> vep_exporter -> MQTT -> vep_mqtt_receiver
+#   vep_host_metrics -> OTLP gRPC -> vep_otel_probe -> DDS -> vep_exporter -> MQTT -> vep_mqtt_logger
 #
 # Usage:
 #   ./01-otel-mqtt-chain.sh              # Dev mode (x86_64)
@@ -190,7 +190,7 @@ echo ""
 # -----------------------------------------------------------------------------
 # Step 5: Start VEP MQTT Receiver (display MQTT messages)
 # -----------------------------------------------------------------------------
-echo "[5/5] Starting vep_mqtt_receiver (MQTT -> display)..."
+echo "[5/5] Starting vep_mqtt_logger (MQTT -> display)..."
 echo ""
 
 RECEIVER_CONTAINER="${CONTAINER_PREFIX}-receiver"
@@ -208,6 +208,6 @@ podman run \
     $CONTAINER_PLATFORM \
     --network host \
     "$VEP_IMAGE" \
-    vep_mqtt_receiver \
+    vep_mqtt_logger \
         --broker $MQTT_BROKER \
         --port $MQTT_PORT

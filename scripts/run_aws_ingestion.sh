@@ -35,8 +35,8 @@ if [ ! -d "$BUILD_DIR" ]; then
     exit 1
 fi
 
-if [ ! -f "$BUILD_DIR/vep-core/vep_mqtt_receiver" ]; then
-    echo "Error: vep_mqtt_receiver not found. Run './build-all.sh' first."
+if [ ! -f "$BUILD_DIR/vep-core/vep_mqtt_logger" ]; then
+    echo "Error: vep_mqtt_logger not found. Run './build-all.sh' first."
     exit 1
 fi
 
@@ -59,5 +59,5 @@ echo ""
 echo "Press Ctrl+C to stop."
 echo ""
 
-# Run the MQTT receiver (foreground)
-exec "$BUILD_DIR/vep-core/vep_mqtt_receiver" $VERBOSE
+# Run the MQTT logger (foreground)
+exec "$BUILD_DIR/vep-core/vep_mqtt_logger" $VERBOSE

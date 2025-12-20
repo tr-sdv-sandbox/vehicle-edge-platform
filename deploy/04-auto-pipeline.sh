@@ -362,7 +362,7 @@ start_container "$CAN_PROBE" $CONTAINER_PLATFORM $PULL_POLICY --network host --c
         --transport avtp || exit 1
 
 # 9. MQTT Receiver
-echo "[9/9] Starting vep_mqtt_receiver..."
+echo "[9/9] Starting vep_mqtt_logger..."
 RECEIVER="${CONTAINER_PREFIX}-receiver"
 CONTAINERS+=("$RECEIVER")
 
@@ -379,4 +379,4 @@ echo ""
 
 # Run receiver in foreground
 podman run --name "$RECEIVER" $CONTAINER_PLATFORM $PULL_POLICY --network host \
-    "$VEP_IMAGE" vep_mqtt_receiver --broker $MQTT_BROKER --port $MQTT_PORT
+    "$VEP_IMAGE" vep_mqtt_logger --broker $MQTT_BROKER --port $MQTT_PORT

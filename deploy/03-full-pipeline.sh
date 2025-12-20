@@ -6,7 +6,7 @@
 #   - Host metrics -> vep_otel_probe -> DDS
 #   - DDS <-> kuksa_dds_bridge <-> KUKSA Databroker
 #   - DDS <-> rt_dds_bridge (loopback for actuator simulation)
-#   - DDS -> vep_exporter -> MQTT -> vep_mqtt_receiver
+#   - DDS -> vep_exporter -> MQTT -> vep_mqtt_logger
 #
 # IMPORTANT: This script requires root/sudo to create AF_PACKET raw sockets for AVTP.
 #   Rootless podman cannot grant CAP_NET_RAW to containers.
@@ -406,7 +406,7 @@ echo ""
 # -----------------------------------------------------------------------------
 # Step 9: Start VEP MQTT Receiver (display MQTT messages)
 # -----------------------------------------------------------------------------
-echo "[9/9] Starting vep_mqtt_receiver (MQTT -> display)..."
+echo "[9/9] Starting vep_mqtt_logger (MQTT -> display)..."
 echo ""
 
 RECEIVER_CONTAINER="${CONTAINER_PREFIX}-receiver"
@@ -425,7 +425,7 @@ echo "  - vep_host_metrics:  Linux metrics -> OTLP (every ${HOST_METRICS_INTERVA
 echo "  - kuksa_dds_bridge:  KUKSA <-> DDS bidirectional"
 echo "  - rt_dds_bridge:     DDS actuator loopback (${RT_LOOPBACK_DELAY_MS}ms)"
 echo "  - vep_can_probe:     AVTP ($AVTP_INTERFACE) -> VSS -> DDS"
-echo "  - vep_mqtt_receiver: MQTT -> display"
+echo "  - vep_mqtt_logger: MQTT -> display"
 echo ""
 echo "Data flows:"
 echo "  CAN:      AVTP -> vep_can_probe -> DDS -> vep_exporter -> MQTT"
@@ -450,6 +450,6 @@ podman run \
     $CONTAINER_PLATFORM \
     --network host \
     "$VEP_IMAGE" \
-    vep_mqtt_receiver \
+    vep_mqtt_logger \
         --broker $MQTT_BROKER \
         --port $MQTT_PORT

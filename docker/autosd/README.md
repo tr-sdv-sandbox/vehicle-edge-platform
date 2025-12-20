@@ -156,11 +156,13 @@ docker run -it --privileged --network host \
 |--------|-------------|
 | `vep_can_probe` | CAN → VSS → DDS probe |
 | `vep_otel_probe` | OTLP gRPC → DDS probe |
+| `vep_avtp_probe` | IEEE 1722 AVTP → DDS probe |
 | `vep_exporter` | DDS → compressed MQTT exporter |
-| `vep_mqtt_receiver` | MQTT receiver/decoder (testing) |
+| `vep_mqtt_logger` | MQTT logger/decoder (testing) |
 | `kuksa_dds_bridge` | KUKSA ↔ DDS bidirectional bridge |
 | `rt_dds_bridge` | DDS ↔ RT transport bridge |
 | `vep_host_metrics` | Host metrics → OTLP collector |
+| `avtp_canplayer` | Replay CAN logs over AVTP |
 
 ## Dockerfile Variants
 
@@ -171,6 +173,8 @@ Full build environment based on CentOS Stream 9 with:
 - CycloneDDS, glog, gflags
 - Lua 5.4, yaml-cpp, nlohmann-json
 - dbcppp (CAN DBC parser)
+- Open1722 (IEEE 1722 AVTP)
+- vsomeip3 (SOME/IP)
 
 ### Dockerfile.runtime
 Multi-stage build producing minimal CentOS Stream 9 runtime:
