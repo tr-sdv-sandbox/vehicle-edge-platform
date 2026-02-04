@@ -84,17 +84,8 @@ else()
 endif()
 
 # ==============================================================================
-# Component 5: vep-core (depends on all above)
-# ==============================================================================
-if(EXISTS ${COMPONENTS_DIR}/vep-core/CMakeLists.txt)
-    message(STATUS "Adding vep-core")
-    add_subdirectory(${COMPONENTS_DIR}/vep-core ${CMAKE_BINARY_DIR}/vep-core)
-else()
-    message(FATAL_ERROR "vep-core not found. Run ./setup.sh first.")
-endif()
-
-# ==============================================================================
-# Component 6: covesa-ifex-core (optional, standalone IFEX services)
+# Component 5: covesa-ifex-core (optional, standalone IFEX services)
+# Must be built before vep-core which depends on ifex-backend-transport-client
 # ==============================================================================
 if(EXISTS ${COMPONENTS_DIR}/covesa-ifex-core/CMakeLists.txt)
     message(STATUS "Adding covesa-ifex-core")
@@ -105,6 +96,16 @@ if(EXISTS ${COMPONENTS_DIR}/covesa-ifex-core/CMakeLists.txt)
     add_subdirectory(${COMPONENTS_DIR}/covesa-ifex-core ${CMAKE_BINARY_DIR}/covesa-ifex-core)
 else()
     message(STATUS "covesa-ifex-core not found, skipping (optional)")
+endif()
+
+# ==============================================================================
+# Component 6: vep-core (depends on all above, including covesa-ifex-core)
+# ==============================================================================
+if(EXISTS ${COMPONENTS_DIR}/vep-core/CMakeLists.txt)
+    message(STATUS "Adding vep-core")
+    add_subdirectory(${COMPONENTS_DIR}/vep-core ${CMAKE_BINARY_DIR}/vep-core)
+else()
+    message(FATAL_ERROR "vep-core not found. Run ./setup.sh first.")
 endif()
 
 # ==============================================================================
@@ -120,10 +121,10 @@ if(EXISTS ${COMPONENTS_DIR}/libkuksa-cpp/CMakeLists.txt)
 message(STATUS "  - libkuksa-cpp")
 endif()
 message(STATUS "  - vep-dds")
-message(STATUS "  - vep-core")
 if(EXISTS ${COMPONENTS_DIR}/covesa-ifex-core/CMakeLists.txt)
 message(STATUS "  - covesa-ifex-core")
 endif()
+message(STATUS "  - vep-core")
 message(STATUS "")
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "Tests: ${VEP_BUILD_TESTS}")
